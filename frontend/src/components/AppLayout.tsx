@@ -1,4 +1,4 @@
-import {Box} from "@mui/material";
+import {Box, Toolbar} from "@mui/material";
 import Navbar from "./Navbar";
 import Sidebar from "./Sidebar";
 
@@ -16,12 +16,12 @@ export default function AppLayout({children}: LayoutProps){
             <Box 
               sx = {{
                 ml: "260px",
-                pt: 10,
                 p: 3,
                 minHeight:"100vh",
                 backgroundColor: "background.default"
               }}
             >
+                <Toolbar />
                 {children}
                 
             </Box>
