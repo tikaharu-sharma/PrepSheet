@@ -1,24 +1,30 @@
-import {Box, Toolbar } from "@mui/material";
+import {Box} from "@mui/material";
 import Navbar from "./Navbar";
 import Sidebar from "./Sidebar";
 
-export default function AppLayout(){
+interface LayoutProps{
+   children: React.ReactNode
+}
+export default function AppLayout({children}: LayoutProps){
     return (
-        <Box sx = {{ display: "flex"}}>
+        <>
             <Sidebar />
             <Navbar />
 
+            {/*main page content*/}
+
             <Box 
-              component = "main"
               sx = {{
-                flexgrow: 1,
+                ml: "260px",
+                pt: 10,
                 p: 3,
-                ml: "260px"
+                minHeight:"100vh",
+                backgroundColor: "background.default"
               }}
             >
-                <Toolbar />
+                {children}
                 
             </Box>
-        </Box>
+        </>
     )
 }

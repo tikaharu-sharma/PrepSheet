@@ -97,7 +97,7 @@ const getItemStyle = (item: string) => ({
       <Box>
         {/* LOGO */}
         <Box sx={{ mb: 3 }}>
-          <img src={PrepSheetLogo} alt="PrepSheet Logo" style={{ width: 140 }} />
+          <img src={PrepSheetLogo} alt="PrepSheet Logo" style={{ width: 140}} />
         </Box>
 
         {/* RESTAURANT SELECTOR */}
