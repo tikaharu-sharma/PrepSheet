@@ -26,17 +26,6 @@
 | 7 | Implement view all sales API (manager) | GET `/api/sales/all` — allow managers to view all sales with date filters |
 | 8 | Implement view own sales API (employee) | GET `/api/sales/my` — allow employees to view their own sales history |
 | 9 | Implement monthly report API | GET `/api/reports/monthly` — aggregated monthly sales data for managers |
-| 10 | Add CORS middleware | Enable cross-origin requests so the frontend can communicate with the backend |
-
-### Frontend Issues (Planned)
-| Issue # | Title | Description |
-|---------|-------|-------------|
-| 11 | Set up React project | Initialize React app with routing |
-| 12 | Create login/signup pages | Build authentication UI |
-| 13 | Create employee sales entry form | Form to add daily sales |
-| 14 | Create manager sales dashboard | View and filter sales data |
-
----
 
 ## Successfully Completed (Sprint 1)
 
@@ -49,15 +38,7 @@
 - [x] **Issue 7**: Implement view all sales API — GET `/api/sales/all` with date filtering (manager only)
 - [x] **Issue 8**: Implement view own sales API — GET `/api/sales/my` (employee)
 - [x] **Issue 9**: Implement monthly report API — GET `/api/reports/monthly` with month filter (manager only)
-- [x] **Issue 10**: Add CORS middleware — cross-origin requests enabled for frontend integration
 
----
-
-## Not Completed & Reasons
-
-- **Frontend Issues (11-14)**: These are assigned to the frontend team and will be tracked separately. Backend team focused exclusively on API development for Sprint 1.
-
----
 
 ## API Endpoints Summary
 
@@ -80,3 +61,4 @@
 - **Authentication**: JWT (`github.com/golang-jwt/jwt/v5`)
 - **Password Hashing**: bcrypt (`golang.org/x/crypto/bcrypt`)
 - **Server**: Go standard library `net/http`
+
