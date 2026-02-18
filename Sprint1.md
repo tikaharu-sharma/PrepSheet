@@ -111,5 +111,30 @@ Establish the foundational frontend architecture, authentication flow, navigatio
 
 ---
 
+### Backend Issues Planned for Sprint 1
+| Issue # | Title | Description |
+|---------|-------|-------------|
+| 1 | Set up Go project with SQLite | Initialize Go module, set up project structure, and configure SQLite database |
+| 2 | Create database schema | Design and implement users and sales tables with proper constraints |
+| 3 | Implement user signup API | POST `/api/signup` — register new employees and managers with hashed passwords |
+| 4 | Implement user login API | POST `/api/login` — authenticate users and return JWT tokens |
+| 5 | Implement JWT auth middleware | Protect routes by validating JWT tokens and injecting user context |
+| 6 | Implement add sale entry API | POST `/api/sales` — allow employees to log daily sales |
+| 7 | Implement view all sales API (manager) | GET `/api/sales/all` — allow managers to view all sales with date filters |
+| 8 | Implement view own sales API (employee) | GET `/api/sales/my` — allow employees to view their own sales history |
+| 9 | Implement monthly report API | GET `/api/reports/monthly` — aggregated monthly sales data for managers |
+
+## Successfully Completed (Sprint 1)
+
+- [x] **Issue 1**: Set up Go project with SQLite — project structure created, SQLite database configured
+- [x] **Issue 2**: Create database schema — `users` and `sales` tables with foreign keys and constraints
+- [x] **Issue 3**: Implement user signup API — POST `/api/signup` with bcrypt password hashing
+- [x] **Issue 4**: Implement user login API — POST `/api/login` with JWT token generation
+- [x] **Issue 5**: Implement JWT auth middleware — token validation, role and user context injection
+- [x] **Issue 6**: Implement add sale entry API — POST `/api/sales` (employee only)
+- [x] **Issue 7**: Implement view all sales API — GET `/api/sales/all` with date filtering (manager only)
+- [x] **Issue 8**: Implement view own sales API — GET `/api/sales/my` (employee)
+- [x] **Issue 9**: Implement monthly report API — GET `/api/reports/monthly` with month filter (manager only)
+
 
 
