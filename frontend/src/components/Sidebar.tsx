@@ -46,13 +46,13 @@ export default function Sidebar(){
 
 
 const menuItems = [
-    { text: "Dashboard", icon: <HomeIcon /> },
-    { text: "Sales Entry", icon: <ReceiptIcon /> },
-    { text: "Users", icon: <PeopleIcon /> },
-    { text: "Reports", icon: <BarChartIcon /> },
-    { text: "Restaurants", icon: <StoreIcon /> },
-    { text: "Register", icon: <PersonAddIcon /> },
-    { text: "Data Visualization", icon: <InsightsIcon /> }
+    { text: "Dashboard", icon: <HomeIcon />, path: "/home" },
+    { text: "Sales Entry", icon: <ReceiptIcon />, path: "/sales-entry" },
+    { text: "Users", icon: <PeopleIcon />, path: "#" },
+    { text: "Reports", icon: <BarChartIcon />, path: "#" },
+    { text: "Restaurants", icon: <StoreIcon />, path: "#" },
+    { text: "Register", icon: <PersonAddIcon />, path: "#" },
+    { text: "Data Visualization", icon: <InsightsIcon />, path: "#" }
 ]
 
 const adminItems = [
@@ -115,10 +115,15 @@ const getItemStyle = (item: string) => ({
 
         {/* MAIN MENU */}
         <List>
-          {menuItems.map((item) => (
+          {menuItems.map((item: any) => (
             <ListItemButton
               key={item.text}
-              onClick={() => setActivePage(item.text)}
+              onClick={() => {
+                setActivePage(item.text)
+                if (item.path !== "#") {
+                  navigate(item.path)
+                }
+              }}
               sx={getItemStyle(item.text)}
             >
               <ListItemIcon

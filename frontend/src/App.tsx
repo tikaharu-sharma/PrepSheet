@@ -1,7 +1,9 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Login from "./pages/Login";
 import Home from "./pages/Home";
+import SalesEntry from "./pages/SalesEntry";
 import RequireAuth from "./features/RequireAuth";
+import AppLayout from "./components/AppLayout";
 
 export default function App() {
   return (
@@ -16,7 +18,8 @@ export default function App() {
 
         {/* Protected */}
         <Route element={<RequireAuth />}>
-          <Route path="/home" element={<Home />} />
+          <Route element={<AppLayout><Home /></AppLayout>} path="/home" />
+          <Route element={<AppLayout><SalesEntry /></AppLayout>} path="/sales-entry" />
         </Route>
 
       </Routes>
