@@ -136,5 +136,26 @@ Establish the foundational frontend architecture, authentication flow, navigatio
 - [x] **Issue 8**: Implement view own sales API — GET `/api/sales/my` (employee)
 - [x] **Issue 9**: Implement monthly report API — GET `/api/reports/monthly` with month filter (manager only)
 
+## API Endpoints Summary
+
+| Method | Endpoint | Auth | Role | Description |
+|--------|----------|------|------|-------------|
+| POST | `/api/signup` | No | — | Register a new user |
+| POST | `/api/login` | No | — | Login and receive JWT |
+| POST | `/api/sales` | Yes | Employee | Add a sales entry |
+| GET | `/api/sales/my` | Yes | Employee | View own sales |
+| GET | `/api/sales/all` | Yes | Manager | View all sales (optional: `?start_date=&end_date=`) |
+| GET | `/api/reports/monthly` | Yes | Manager | Monthly report (optional: `?month=YYYY-MM`) |
+| GET | `/api/health` | No | — | Health check |
+
+---
+
+## Tech Stack
+
+- **Language**: Go (Golang)
+- **Database**: SQLite (via `github.com/mattn/go-sqlite3`)
+- **Authentication**: JWT (`github.com/golang-jwt/jwt/v5`)
+- **Password Hashing**: bcrypt (`golang.org/x/crypto/bcrypt`)
+- **Server**: Go standard library `net/http`
 
 
