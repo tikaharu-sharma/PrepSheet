@@ -50,7 +50,7 @@ const menuItems = [
     { text: "Sales Entry", icon: <ReceiptIcon />, path: "/sales-entry" },
     { text: "Users", icon: <PeopleIcon />, path: "/users" },
     { text: "Reports", icon: <BarChartIcon />, path: "#" },
-    { text: "Restaurants", icon: <StoreIcon />, path: "#" },
+    { text: "Restaurants", icon: <StoreIcon />, path: "/restaurants" },
     { text: "Register", icon: <PersonAddIcon />, path: "#" },
     { text: "Data Visualization", icon: <InsightsIcon />, path: "#" }
 ]

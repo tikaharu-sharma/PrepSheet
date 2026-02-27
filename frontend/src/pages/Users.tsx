@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   Box,
   Button,
@@ -32,15 +32,11 @@ import {
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
+import { getRestaurants, type Restaurant } from './Restaurants';
 
 // ============================================================================
 // TYPES
 // ============================================================================
-
-type Restaurant = {
-  id: string;
-  name: string;
-};
 
 type Employee = {
   id: string;
@@ -66,14 +62,6 @@ type SnackbarState = {
 // MOCK DATA
 // ============================================================================
 
-const MOCK_RESTAURANTS: Restaurant[] = [
-  { id: 'rest-1', name: 'The Grill House' },
-  { id: 'rest-2', name: 'Pasta Paradise' },
-  { id: 'rest-3', name: 'Sushi Delight' },
-  { id: 'rest-4', name: 'Burger Barn' },
-  { id: 'rest-5', name: 'Taco Fiesta' },
-];
-
 const MOCK_EMPLOYEES: Employee[] = [
   { id: 'emp-1', name: 'Alice Johnson', email: 'alice@example.com', status: 'active' },
   { id: 'emp-2', name: 'Bob Smith', email: 'bob@example.com', status: 'active' },
@@ -84,12 +72,12 @@ const MOCK_EMPLOYEES: Employee[] = [
 ];
 
 const MOCK_ASSIGNMENTS: Assignment[] = [
-  { id: 'assign-1', restaurantId: 'rest-1', employeeId: 'emp-1', status: 'active' },
-  { id: 'assign-2', restaurantId: 'rest-1', employeeId: 'emp-2', status: 'active' },
-  { id: 'assign-3', restaurantId: 'rest-2', employeeId: 'emp-3', status: 'inactive' },
-  { id: 'assign-4', restaurantId: 'rest-3', employeeId: 'emp-4', status: 'active' },
-  { id: 'assign-5', restaurantId: 'rest-4', employeeId: 'emp-5', status: 'active' },
-  { id: 'assign-6', restaurantId: 'rest-5', employeeId: 'emp-6', status: 'inactive' },
+  { id: 'assign-1', restaurantId: '1', employeeId: 'emp-1', status: 'active' },
+  { id: 'assign-2', restaurantId: '2', employeeId: 'emp-2', status: 'active' },
+  { id: 'assign-3', restaurantId: '3', employeeId: 'emp-3', status: 'inactive' },
+  { id: 'assign-4', restaurantId: '4', employeeId: 'emp-4', status: 'active' },
+  { id: 'assign-5', restaurantId: '5', employeeId: 'emp-5', status: 'active' },
+  { id: 'assign-6', restaurantId: '6', employeeId: 'emp-6', status: 'inactive' },
 ];
 
 // ============================================================================
@@ -109,7 +97,7 @@ export const Users: React.FC = () => {
   // STATE
   // =========================================================================
 
-  const [restaurants, setRestaurants] = useState<Restaurant[]>(MOCK_RESTAURANTS);
+  const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
   const [employees] = useState<Employee[]>(MOCK_EMPLOYEES);
   const [assignments, setAssignments] = useState<Assignment[]>(MOCK_ASSIGNMENTS);
 
@@ -127,6 +115,79 @@ export const Users: React.FC = () => {
   const [newRestaurantName, setNewRestaurantName] = useState('');
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   const [isActive, setIsActive] = useState(true);
+
+  // Load restaurants from Restaurants page and sync on changes
+  useEffect(() => {
+    const loadedRestaurants = getRestaurants();
+    setRestaurants(loadedRestaurants);
+
+    // Sync assignments when restaurants change
+    setAssignments((prevAssignments) => {
+      // Filter out assignments for deleted restaurants
+      const validAssignments = prevAssignments.filter((assignment) =>
+        loadedRestaurants.some((r) => r.id === assignment.restaurantId)
+      );
+
+      // Find new restaurants that don't have assignments yet
+      const newRestaurants = loadedRestaurants.filter(
+        (restaurant) =>
+          !prevAssignments.some((a) => a.restaurantId === restaurant.id)
+      );
+
+      // Create assignments for new restaurants with default employees
+      const defaultEmployeeIds = MOCK_EMPLOYEES.map((emp) => emp.id);
+      const newAssignments = newRestaurants.flatMap((restaurant, restaurantIndex) => {
+        // Assign 1 employee per new restaurant (cycling through employees)
+        const employeeId = defaultEmployeeIds[restaurantIndex % defaultEmployeeIds.length];
+        return {
+          id: `assign-${Date.now()}-${restaurantIndex}`,
+          restaurantId: restaurant.id,
+          employeeId,
+          status: 'active' as const,
+        };
+      });
+
+      return [...validAssignments, ...newAssignments];
+    });
+
+    // Listen for storage changes from other tabs/windows
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'prepsheet_restaurants') {
+        const updatedRestaurants = getRestaurants();
+        setRestaurants(updatedRestaurants);
+
+        setAssignments((prevAssignments) => {
+          // Filter out assignments for deleted restaurants
+          const validAssignments = prevAssignments.filter((assignment) =>
+            updatedRestaurants.some((r) => r.id === assignment.restaurantId)
+          );
+
+          // Find new restaurants
+          const newRestaurants = updatedRestaurants.filter(
+            (restaurant) =>
+              !prevAssignments.some((a) => a.restaurantId === restaurant.id)
+          );
+
+          // Create assignments for new restaurants
+          const defaultEmployeeIds = MOCK_EMPLOYEES.map((emp) => emp.id);
+          const newAssignments = newRestaurants.flatMap((restaurant, restaurantIndex) => {
+            const employeeId = defaultEmployeeIds[restaurantIndex % defaultEmployeeIds.length];
+            return {
+              id: `assign-${Date.now()}-${restaurantIndex}`,
+              restaurantId: restaurant.id,
+              employeeId,
+              status: 'active' as const,
+            };
+          });
+
+          return [...validAssignments, ...newAssignments];
+        });
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
 
   // =========================================================================
   // HELPER FUNCTIONS

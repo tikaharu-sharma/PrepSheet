@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Box,
   Button,
@@ -16,6 +16,7 @@ import {
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import DeleteIcon from '@mui/icons-material/Delete'
+import { getRestaurants, type Restaurant } from './Restaurants'
 
 interface Expenditure {
   id: string
@@ -36,15 +37,6 @@ interface SalesData {
   note: string
 }
 
-const RESTAURANTS = [
-  'Restaurant 1',
-  'Restaurant 2',
-  'Restaurant 3',
-  'Restaurant 4',
-  'Restaurant 5',
-  'Restaurant 6',
-]
-
 const getTodayDate = () => {
   const today = new Date()
   return today.toISOString().split('T')[0]
@@ -55,6 +47,12 @@ export default function SalesEntry() {
   const [dateValue, setDateValue] = useState(getTodayDate())
   const [restaurant, setRestaurant] = useState('')
   const [successOpen, setSuccessOpen] = useState(false)
+  const [restaurants, setRestaurants] = useState<Restaurant[]>([])
+
+  useEffect(() => {
+    const loadedRestaurants = getRestaurants()
+    setRestaurants(loadedRestaurants)
+  }, [])
 
   const [sales, setSales] = useState<SalesData>({
     date: '',
@@ -171,9 +169,9 @@ export default function SalesEntry() {
               fullWidth
             >
               <MenuItem value="">-- Choose Restaurant --</MenuItem>
-              {RESTAURANTS.map((r) => (
-                <MenuItem key={r} value={r}>
-                  {r}
+              {restaurants.map((r) => (
+                <MenuItem key={r.id} value={r.name}>
+                  {r.name}
                 </MenuItem>
               ))}
             </TextField>

@@ -3,6 +3,7 @@ import Login from "./pages/Login";
 import Home from "./pages/Home";
 import SalesEntry from "./pages/SalesEntry";
 import Users from "./pages/Users";
+import Restaurants from "./pages/Restaurants";
 import RequireAuth from "./features/RequireAuth";
 import AppLayout from "./components/AppLayout";
 
@@ -22,6 +23,7 @@ export default function App() {
           <Route element={<AppLayout><Home /></AppLayout>} path="/home" />
           <Route element={<AppLayout><SalesEntry /></AppLayout>} path="/sales-entry" />
           <Route element={<AppLayout><Users /></AppLayout>} path="/users" />
+          <Route element={<AppLayout><Restaurants /></AppLayout>} path="/restaurants" />
         </Route>
 
       </Routes>
