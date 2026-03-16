@@ -7,7 +7,9 @@ import {
   ListItemIcon,
   ListItemText,
   Avatar,
-  IconButton
+  IconButton,
+  useTheme,
+  useMediaQuery
 } from "@mui/material";
 
 import HomeIcon from "@mui/icons-material/Home";
@@ -33,7 +35,20 @@ import { useState } from "react";
 const drawerWidth = 260;
 const activeColor = "#4ea674";
 
-export default function Sidebar(){
+interface MenuItem {
+  text: string;
+  icon: React.ReactNode;
+  path?: string;
+}
+
+interface SidebarProps {
+  mobileOpen: boolean;
+  handleDrawerToggle: () => void;
+}
+
+export default function Sidebar({ mobileOpen, handleDrawerToggle }: SidebarProps){
+    const theme = useTheme();
+    const isMobile = useMediaQuery(theme.breakpoints.down('md'));
     const[activePage, setActivePage] = useState("Dashboard")
 
     const navigate = useNavigate()
@@ -45,7 +60,7 @@ export default function Sidebar(){
 
 
 
-const menuItems = [
+const menuItems: MenuItem[] = [
     { text: "Dashboard", icon: <HomeIcon />, path: "/home" },
     { text: "Sales Entry", icon: <ReceiptIcon />, path: "/sales-entry" },
     { text: "Users", icon: <PeopleIcon />, path: "/users" },
@@ -55,7 +70,7 @@ const menuItems = [
     { text: "Data Visualization", icon: <InsightsIcon />, path: "#" }
 ]
 
-const adminItems = [
+const adminItems: MenuItem[] = [
     {text: "Admin Role", icon:<AdminPanelSettingsIcon/>},
     {text:"Settings", icon:<SettingsIcon/>}
 ]
@@ -73,7 +88,12 @@ const getItemStyle = (item: string) => ({
 
   return(
     <Drawer
-    variant="permanent"
+    variant={isMobile ? "temporary" : "permanent"}
+    open={isMobile ? mobileOpen : true}
+    onClose={handleDrawerToggle}
+    ModalProps={{
+      keepMounted: true, // Better open performance on mobile.
+    }}
     sx = {{
         width: drawerWidth,
         flexShrink:0,
@@ -115,12 +135,12 @@ const getItemStyle = (item: string) => ({
 
         {/* MAIN MENU */}
         <List>
-          {menuItems.map((item: any) => (
+          {menuItems.map((item) => (
             <ListItemButton
               key={item.text}
               onClick={() => {
                 setActivePage(item.text)
-                if (item.path !== "#") {
+                if (item.path && item.path !== "#") {
                   navigate(item.path)
                 }
               }}
@@ -148,7 +168,12 @@ const getItemStyle = (item: string) => ({
           {adminItems.map((item) => (
             <ListItemButton
               key={item.text}
-              onClick={() => setActivePage(item.text)}
+              onClick={() => {
+                setActivePage(item.text)
+                if (item.path && item.path !== "#") {
+                  navigate(item.path)
+                }
+              }}
               sx={getItemStyle(item.text)}
             >
               <ListItemIcon

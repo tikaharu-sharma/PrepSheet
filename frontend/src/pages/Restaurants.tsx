@@ -38,7 +38,7 @@ const DEFAULT_RESTAURANTS: Restaurant[] = [
 
 const STORAGE_KEY = 'prepsheet_restaurants'
 
-export function getRestaurants(): Restaurant[] {
+export function getRestaurants(): Restaurant[] { // eslint-disable-line react-refresh/only-export-components
   const stored = localStorage.getItem(STORAGE_KEY)
   if (stored) {
     try {
@@ -51,7 +51,7 @@ export function getRestaurants(): Restaurant[] {
   return DEFAULT_RESTAURANTS
 }
 
-export function saveRestaurants(restaurants: Restaurant[]): void {
+export function saveRestaurants(restaurants: Restaurant[]): void { // eslint-disable-line react-refresh/only-export-components
   localStorage.setItem(STORAGE_KEY, JSON.stringify(restaurants))
 }
 
@@ -61,7 +61,7 @@ export default function Restaurants() {
   const [newRestaurantName, setNewRestaurantName] = useState('')
 
   useEffect(() => {
-    setRestaurants(getRestaurants())
+    setRestaurants(getRestaurants()) // eslint-disable-line react-hooks/set-state-in-effect
   }, [])
 
   const handleAddRestaurant = () => {
@@ -116,7 +116,7 @@ export default function Restaurants() {
               No restaurants added yet. Click "Add Restaurant" to start.
             </Typography>
           ) : (
-            <TableContainer component={Paper} sx={{ backgroundColor: 'grey.50' }}>
+            <TableContainer component={Paper} sx={{ backgroundColor: 'grey.50', overflowX: 'auto' }}>
               <Table>
                 <TableHead>
                   <TableRow sx={{ backgroundColor: 'primary.main' }}>
