@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Button,
@@ -119,7 +119,7 @@ export const Users: React.FC = () => {
   // Load restaurants from Restaurants page and sync on changes
   useEffect(() => {
     const loadedRestaurants = getRestaurants();
-    setRestaurants(loadedRestaurants);
+    setRestaurants(loadedRestaurants); // eslint-disable-line react-hooks/set-state-in-effect
 
     // Sync assignments when restaurants change
     setAssignments((prevAssignments) => {
@@ -193,13 +193,13 @@ export const Users: React.FC = () => {
   // HELPER FUNCTIONS
   // =========================================================================
 
-  const getRestaurantName = (restaurantId: string): string => {
+  const getRestaurantName = useCallback((restaurantId: string): string => {
     return restaurants.find((r) => r.id === restaurantId)?.name || 'Unknown';
-  };
+  }, [restaurants]);
 
-  const getEmployeeInfo = (employeeId: string): Employee | undefined => {
+  const getEmployeeInfo = useCallback((employeeId: string): Employee | undefined => {
     return employees.find((e) => e.id === employeeId);
-  };
+  }, [employees]);
 
   const showSnackbar = (message: string, severity: 'success' | 'error' | 'info' | 'warning' = 'success') => {
     setSnackbar({ open: true, message, severity });
@@ -229,7 +229,7 @@ export const Users: React.FC = () => {
         employeeEmail.includes(lowerSearchTerm)
       );
     });
-  }, [assignments, searchTerm]);
+  }, [assignments, searchTerm, getRestaurantName, getEmployeeInfo]);
 
   // =========================================================================
   // DIALOG HANDLERS
@@ -377,7 +377,7 @@ export const Users: React.FC = () => {
 
       {/* Table */}
       <Card>
-        <TableContainer component={Paper}>
+        <TableContainer component={Paper} sx={{ overflowX: 'auto' }}>
           <Table>
             <TableHead sx={{ backgroundColor: '#f5f5f5' }}>
               <TableRow>
