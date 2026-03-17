@@ -4,7 +4,6 @@ import Toolbar from '@mui/material/Toolbar'
 import Box from '@mui/material/Box'
 import Avatar from "@mui/material/Avatar"
 
-
 export default function Navbar() {
 
 	return (

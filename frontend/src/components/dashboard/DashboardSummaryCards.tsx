@@ -14,9 +14,10 @@ interface DashboardCardProps {
   title: string;
   subtitle: string;
   value: string;
-  trend: "up" | "down";
+  trend: "up" | "down"; // Only "up" or "down" allowed
   trendPercent: string;
-  previousInfo: string;
+  previousText: string;
+  previousValue: string;
   detailsLink: string;
   icon: ReactNode;
 }
@@ -27,47 +28,32 @@ const DashboardCard: React.FC<DashboardCardProps> = ({
   value,
   trend,
   trendPercent,
-  previousInfo,
+  previousText,
+  previousValue,
   detailsLink,
   icon,
 }) => {
   const trendColor = trend === "up" ? "#27ae60" : "#e74c3c";
-  const titleColor = "#23272e";
-  const mainValueColor = "#023337";
-  const subtitleColor = "#6a717f";
-  const detailsColor = "#6467f2";
 
   return (
-    <Card
-      elevation={3}
-      sx={{
-        borderRadius: 3,
-        minHeight: 180,
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "space-between",
-        p: 2,
-      }}
-    >
-      {/* Title + Subtitle + Icon */}
-      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+    <Card elevation={3} sx={{ borderRadius: 3, minHeight: 180, p: 2 }}>
+      <Box sx={{ display: "flex", justifyContent: "space-between" }}>
         <Box>
-          <Typography variant="h6" sx={{ color: titleColor, fontWeight: 600 }}>
+          <Typography variant="h6" sx={{ color: "#23272e", fontWeight: 600 }}>
             {title}
           </Typography>
-          <Typography variant="body2" sx={{ color: subtitleColor }}>
+          <Typography variant="body2" sx={{ color: "#6a717f" }}>
             {subtitle}
           </Typography>
         </Box>
         <Box sx={{ fontSize: 32, color: "#4ea674" }}>{icon}</Box>
       </Box>
 
-      {/* Main Value + Trend */}
       <Box sx={{ display: "flex", alignItems: "center", mt: 1, gap: 1 }}>
-        <Typography variant="h4" sx={{ fontWeight: 700, color: mainValueColor }}>
+        <Typography variant="h4" sx={{ fontWeight: 700, color: "#023337" }}>
           {value}
         </Typography>
-        <Typography variant="body2" sx={{ color: subtitleColor }}>
+        <Typography variant="body2" sx={{ color: "#6a717f" }}>
           Sales
         </Typography>
         <Box sx={{ display: "flex", alignItems: "center", color: trendColor, ml: 1 }}>
@@ -78,23 +64,16 @@ const DashboardCard: React.FC<DashboardCardProps> = ({
         </Box>
       </Box>
 
-      {/* Previous Info */}
-      <Typography variant="caption" sx={{ color: subtitleColor, mt: 0.5 }}>
-        {previousInfo}
+      <Typography variant="caption" sx={{ mt: 0.5 }}>
+        <span style={{ color: "#6a717f" }}>{previousText}</span>{" "}
+        <span style={{ color: "#6467f2" }}>({previousValue})</span>
       </Typography>
 
-      {/* Details Button */}
       <Box sx={{ display: "flex", justifyContent: "flex-end", mt: 1 }}>
         <Button
           size="small"
           variant="outlined"
-          sx={{
-            borderColor: detailsColor,
-            color: detailsColor,
-            borderRadius: "20px",
-            textTransform: "none",
-            fontWeight: 500,
-          }}
+          sx={{ borderColor: "#6467f2", color: "#6467f2", borderRadius: "20px", textTransform: "none" }}
           href={detailsLink}
         >
           Details
@@ -104,16 +83,18 @@ const DashboardCard: React.FC<DashboardCardProps> = ({
   );
 };
 
-// Dashboard grid
+// ---- Dashboard grid ----
+
 export default function DashboardSummaryCards() {
-  const cards: DashboardCardProps[] = [
+  const cardsData: DashboardCardProps[] = [
     {
       title: "Total Sales",
       subtitle: "Last 7 days",
       value: "$3,500",
       trend: "up",
       trendPercent: "+12%",
-      previousInfo: "Previous 7 days ($3,200)",
+      previousText: "Previous 7 days",
+      previousValue: "$3,200",
       detailsLink: "/reports",
       icon: <AttachMoneyIcon />,
     },
@@ -123,7 +104,8 @@ export default function DashboardSummaryCards() {
       value: "$2,100",
       trend: "down",
       trendPercent: "-5%",
-      previousInfo: "Previous 7 days ($2,200)",
+      previousText: "Previous 7 days",
+      previousValue: "$2,200",
       detailsLink: "/reports",
       icon: <LunchDiningIcon />,
     },
@@ -133,16 +115,17 @@ export default function DashboardSummaryCards() {
       value: "$1,400",
       trend: "up",
       trendPercent: "+8%",
-      previousInfo: "Previous 7 days ($1,300)",
+      previousText: "Previous 7 days",
+      previousValue: "$1,300",
       detailsLink: "/reports",
       icon: <DinnerDiningIcon />,
     },
   ];
 
   return (
-    <Grid container spacing={2}>
-      {cards.map((card) => (
-        <Grid xs={12} sm={6} md={4} key={card.title}>
+    <Grid container spacing={3}>
+      {cardsData.map((card) => (
+        <Grid key={card.title} size = {{ xs:12, sm:6, md:4}}>
           <DashboardCard {...card} />
         </Grid>
       ))}

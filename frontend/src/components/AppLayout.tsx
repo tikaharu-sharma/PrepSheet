@@ -5,6 +5,7 @@ import Sidebar from "./Sidebar";
 interface LayoutProps{
    children: React.ReactNode
 }
+
 export default function AppLayout({children}: LayoutProps){
     return (
         <>

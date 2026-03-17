@@ -1,15 +1,10 @@
-import { Typography} from '@mui/material'
-import AppLayout from '../components/AppLayout'
-import DashboardSummaryCards from '../components/dashboard/DashboardSummaryCards'
+import Dashboard from './Dashboard'
+import {Container} from "@mui/material"
 
 export default function Home() {
   return (
-    <AppLayout>
-
-        <Typography variant="h4">
-          Welcome to PrepSheet Dashboard
-        </Typography>
-        <DashboardSummaryCards />
-      </AppLayout>
+     <Container maxWidth = "lg">
+        <Dashboard />
+      </Container>
   )
 }
