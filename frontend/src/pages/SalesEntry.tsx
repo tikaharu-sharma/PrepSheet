@@ -51,7 +51,7 @@ export default function SalesEntry() {
 
   useEffect(() => {
     const loadedRestaurants = getRestaurants()
-    setRestaurants(loadedRestaurants)
+    setRestaurants(loadedRestaurants) // eslint-disable-line react-hooks/set-state-in-effect
   }, [])
 
   const [sales, setSales] = useState<SalesData>({
@@ -207,7 +207,7 @@ export default function SalesEntry() {
           <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mt: 2 }}>
             Lunch Sales
           </Typography>
-          <Stack direction="row" spacing={2}>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
             <TextField
               label="No. of Persons (Lunch)"
               type="number"
@@ -228,7 +228,7 @@ export default function SalesEntry() {
           <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mt: 2 }}>
             Dinner Sales
           </Typography>
-          <Stack direction="row" spacing={2}>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
             <TextField
               label="No. of Persons (Dinner)"
               type="number"
@@ -249,7 +249,7 @@ export default function SalesEntry() {
           <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mt: 2 }}>
             Additional Sales & Cash
           </Typography>
-          <Stack direction="row" spacing={2}>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
             <TextField
               label="Credit Sale (Cards)"
               type="number"
@@ -274,7 +274,7 @@ export default function SalesEntry() {
           <Stack spacing={2}>
             {sales.expenditures.map((exp) => (
               <Paper key={exp.id} sx={{ p: 2, backgroundColor: 'grey.50' }}>
-                <Stack direction="row" spacing={2} alignItems="flex-start">
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems="flex-start">
                   <TextField
                     label="Title"
                     value={exp.title}

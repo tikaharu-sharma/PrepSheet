@@ -7,7 +7,9 @@ import {
   ListItemIcon,
   ListItemText,
   Avatar,
-  IconButton
+  IconButton,
+  useTheme,
+  useMediaQuery
 } from "@mui/material";
 
 import HomeIcon from "@mui/icons-material/Home";
@@ -31,7 +33,19 @@ import PrepSheetLogo from "../assets/PrepSheet.svg";
 const drawerWidth = 260;
 const activeColor = "#4ea674";
 
-export default function Sidebar(){
+interface MenuItem {
+  text: string;
+  icon: React.ReactNode;
+  path: string;
+}
+interface SidebarProps {
+  mobileOpen: boolean;
+  handleDrawerToggle: () => void;
+}
+
+export default function Sidebar({ mobileOpen, handleDrawerToggle }: SidebarProps){
+    const theme = useTheme();
+    const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
   const navigate = useNavigate()
   const location = useLocation()
@@ -43,7 +57,7 @@ export default function Sidebar(){
 
 
 
-const menuItems = [
+const menuItems: MenuItem[] = [
     { text: "Dashboard", icon: <HomeIcon />, path: "/home" },
     { text: "Sales Entry", icon: <ReceiptIcon />, path: "/sales-entry" },
     { text: "Users", icon: <PeopleIcon />, path: "/users" },
@@ -53,7 +67,7 @@ const menuItems = [
     { text: "Data Visualization", icon: <InsightsIcon />, path: "#" }
 ]
 
-const adminItems = [
+const adminItems: MenuItem[] = [
     {text: "Admin Role", icon:<AdminPanelSettingsIcon/>, path: "#"},
     {text:"Settings", icon:<SettingsIcon/>, path:"#"}
 ]
@@ -71,7 +85,12 @@ const getItemStyle = (path: string) => ({
 
   return(
     <Drawer
-    variant="permanent"
+    variant={isMobile ? "temporary" : "permanent"}
+    open={isMobile ? mobileOpen : true}
+    onClose={handleDrawerToggle}
+    ModalProps={{
+      keepMounted: true, // Better open performance on mobile.
+    }}
     sx = {{
         width: drawerWidth,
         flexShrink:0,
