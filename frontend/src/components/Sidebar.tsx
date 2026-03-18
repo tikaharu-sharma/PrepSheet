@@ -24,13 +24,11 @@ import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
 import LogoutIcon from "@mui/icons-material/Logout";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { logoutMock } from '../lib/auth'
 
 import PrepSheetLogo from "../assets/PrepSheet.svg";
 
-
-import { useState } from "react";
 
 const drawerWidth = 260;
 const activeColor = "#4ea674";
@@ -38,9 +36,8 @@ const activeColor = "#4ea674";
 interface MenuItem {
   text: string;
   icon: React.ReactNode;
-  path?: string;
+  path: string;
 }
-
 interface SidebarProps {
   mobileOpen: boolean;
   handleDrawerToggle: () => void;
@@ -49,9 +46,9 @@ interface SidebarProps {
 export default function Sidebar({ mobileOpen, handleDrawerToggle }: SidebarProps){
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-    const[activePage, setActivePage] = useState("Dashboard")
 
-    const navigate = useNavigate()
+  const navigate = useNavigate()
+  const location = useLocation()
 
 	const handleLogout = () => {
 		logoutMock()
@@ -71,18 +68,18 @@ const menuItems: MenuItem[] = [
 ]
 
 const adminItems: MenuItem[] = [
-    {text: "Admin Role", icon:<AdminPanelSettingsIcon/>},
-    {text:"Settings", icon:<SettingsIcon/>}
+    {text: "Admin Role", icon:<AdminPanelSettingsIcon/>, path: "#"},
+    {text:"Settings", icon:<SettingsIcon/>, path:"#"}
 ]
 
-const getItemStyle = (item: string) => ({
-    backgroundColor: activePage === item ? activeColor : "transparent",
-    color: activePage === item ? "#ffffff" : "inherit",
+const getItemStyle = (path: string) => ({
+    backgroundColor: location.pathname === path ? activeColor : "transparent",
+    color: location.pathname === path ? "#ffffff" : "inherit",
     borderRadius: "8px",
     mb: 0.5,
     "&:hover": {
       backgroundColor:
-        activePage === item ? activeColor : "rgba(0,0,0,0.04)"
+        location.pathname === path ? activeColor : "rgba(0,0,0,0.04)"
     }
   });
 
@@ -139,16 +136,15 @@ const getItemStyle = (item: string) => ({
             <ListItemButton
               key={item.text}
               onClick={() => {
-                setActivePage(item.text)
-                if (item.path && item.path !== "#") {
+                if (item.path !== "#") {
                   navigate(item.path)
                 }
               }}
-              sx={getItemStyle(item.text)}
+              sx={getItemStyle(item.path)}
             >
               <ListItemIcon
                 sx={{
-                  color: activePage === item.text ? "#ffffff" : "inherit"
+                  color: location.pathname === item.path ? "#ffffff" : "inherit"
                 }}
               >
                 {item.icon}
@@ -168,17 +164,11 @@ const getItemStyle = (item: string) => ({
           {adminItems.map((item) => (
             <ListItemButton
               key={item.text}
-              onClick={() => {
-                setActivePage(item.text)
-                if (item.path && item.path !== "#") {
-                  navigate(item.path)
-                }
-              }}
-              sx={getItemStyle(item.text)}
+              sx={getItemStyle(item.path)}
             >
               <ListItemIcon
                 sx={{
-                  color: activePage === item.text ? "#ffffff" : "inherit"
+                  color: location.pathname === item.path ? "#ffffff" : "inherit"
                 }}
               >
                 {item.icon}

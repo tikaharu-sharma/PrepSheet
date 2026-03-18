@@ -6,6 +6,7 @@ import Sidebar from "./Sidebar";
 interface LayoutProps{
    children: React.ReactNode
 }
+
 export default function AppLayout({children}: LayoutProps){
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('md'));
