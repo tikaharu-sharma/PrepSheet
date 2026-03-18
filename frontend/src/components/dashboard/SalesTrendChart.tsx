@@ -10,6 +10,11 @@ import {
 import Card from "@mui/material/Card";
 import Typography from "@mui/material/Typography";
 import Box from "@mui/material/Box";
+import { useEffect } from "react";
+
+interface Props {
+  restaurantId?: string;
+}
 
 const data = [
   { day: "Mon", sales: 400 },
@@ -21,7 +26,15 @@ const data = [
   { day: "Sun", sales: 1100 }
 ];
 
-export default function SalesTrendChart() {
+export default function SalesTrendChart({ restaurantId} :Props) {
+  useEffect(() => {
+    if (!restaurantId) return;
+
+    console.log("Fetching chart data for restaurant:", restaurantId);
+
+    // later to be replaced with backend call:
+    // fetch(`/api/sales?restaurantId=${restaurantId}`)
+  }, [restaurantId]);
   return (
     <Card sx={{ p: 3, borderRadius: 3 }}>
       <Typography variant="h6" sx={{ mb: 2 }}>

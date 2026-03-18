@@ -33,6 +33,7 @@ import {
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { getRestaurants, type Restaurant } from './Restaurants';
+import { useRestaurant } from "../context/useRestaurant";
 
 // ============================================================================
 // TYPES
@@ -97,7 +98,7 @@ export const Users: React.FC = () => {
   // STATE
   // =========================================================================
 
-  const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
+  const { restaurants, selectedRestaurant, setRestaurants } = useRestaurant();
   const [employees] = useState<Employee[]>(MOCK_EMPLOYEES);
   const [assignments, setAssignments] = useState<Assignment[]>(MOCK_ASSIGNMENTS);
 
@@ -110,7 +111,7 @@ export const Users: React.FC = () => {
   const [selectedAssignmentId, setSelectedAssignmentId] = useState<string | null>(null);
 
   // Form states
-  const [selectedRestaurant, setSelectedRestaurant] = useState<Restaurant | null>(null);
+  const [selectedRestaurantForm, setSelectedRestaurantForm] = useState<Restaurant | null>(null);
   const [isAddingNewRestaurant, setIsAddingNewRestaurant] = useState(false);
   const [newRestaurantName, setNewRestaurantName] = useState('');
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
@@ -119,10 +120,11 @@ export const Users: React.FC = () => {
   // Load restaurants from Restaurants page and sync on changes
   useEffect(() => {
     const loadedRestaurants = getRestaurants();
-    setRestaurants(loadedRestaurants); // eslint-disable-line react-hooks/set-state-in-effect
+    setRestaurants(loadedRestaurants)
 
     // Sync assignments when restaurants change
-    setAssignments((prevAssignments) => {
+    if(loadedRestaurants.length > 0){
+      setAssignments((prevAssignments) => {
       // Filter out assignments for deleted restaurants
       const validAssignments = prevAssignments.filter((assignment) =>
         loadedRestaurants.some((r) => r.id === assignment.restaurantId)
@@ -149,6 +151,7 @@ export const Users: React.FC = () => {
 
       return [...validAssignments, ...newAssignments];
     });
+    }
 
     // Listen for storage changes from other tabs/windows
     const handleStorageChange = (e: StorageEvent) => {
@@ -187,7 +190,7 @@ export const Users: React.FC = () => {
 
     window.addEventListener('storage', handleStorageChange);
     return () => window.removeEventListener('storage', handleStorageChange);
-  }, []);
+  }, [setRestaurants]);
 
   // =========================================================================
   // HELPER FUNCTIONS
@@ -214,7 +217,13 @@ export const Users: React.FC = () => {
   // =========================================================================
 
   const filteredAssignments = useMemo(() => {
-    if (!searchTerm) return assignments;
+    let result = assignments
+    if(selectedRestaurant){
+      result = result.filter(
+        (a) => a.restaurantId === selectedRestaurant.id
+      )
+    }
+    if (!searchTerm) return result;
 
     const lowerSearchTerm = searchTerm.toLowerCase();
     return assignments.filter((assignment) => {
@@ -229,7 +238,7 @@ export const Users: React.FC = () => {
         employeeEmail.includes(lowerSearchTerm)
       );
     });
-  }, [assignments, searchTerm, getRestaurantName, getEmployeeInfo]);
+  }, [assignments, searchTerm, selectedRestaurant, getRestaurantName, getEmployeeInfo]);
 
   // =========================================================================
   // DIALOG HANDLERS
@@ -237,7 +246,7 @@ export const Users: React.FC = () => {
 
   const handleAddClick = () => {
     setSelectedAssignmentId(null);
-    setSelectedRestaurant(null);
+    setSelectedRestaurantForm(null);
     setIsAddingNewRestaurant(false);
     setNewRestaurantName('');
     setSelectedEmployee(null);
@@ -250,7 +259,7 @@ export const Users: React.FC = () => {
     if (!assignment) return;
 
     setSelectedAssignmentId(assignmentId);
-    setSelectedRestaurant(restaurants.find((r) => r.id === assignment.restaurantId) || null);
+    setSelectedRestaurantForm(restaurants.find((r) => r.id === assignment.restaurantId) || null);
     setIsAddingNewRestaurant(false);
     setNewRestaurantName('');
     setSelectedEmployee(employees.find((e) => e.id === assignment.employeeId) || null);
@@ -261,7 +270,7 @@ export const Users: React.FC = () => {
   const handleDialogClose = () => {
     setIsDialogOpen(false);
     setSelectedAssignmentId(null);
-    setSelectedRestaurant(null);
+    setSelectedRestaurantForm(null);
     setIsAddingNewRestaurant(false);
     setNewRestaurantName('');
     setSelectedEmployee(null);
@@ -270,7 +279,7 @@ export const Users: React.FC = () => {
 
   const handleDialogSave = () => {
     // Validation
-    let restaurant = selectedRestaurant;
+    let restaurant = selectedRestaurantForm;
 
     if (isAddingNewRestaurant) {
       if (!newRestaurantName.trim()) {
@@ -460,15 +469,15 @@ export const Users: React.FC = () => {
             <FormControl fullWidth>
               <InputLabel>Restaurant</InputLabel>
               <Select
-                value={isAddingNewRestaurant ? 'NEW' : selectedRestaurant?.id || ''}
+                value={isAddingNewRestaurant ? 'NEW' : selectedRestaurantForm?.id || ''}
                 onChange={(e) => {
                   if (e.target.value === 'NEW') {
                     setIsAddingNewRestaurant(true);
-                    setSelectedRestaurant(null);
+                    setSelectedRestaurantForm(null);
                   } else {
                     setIsAddingNewRestaurant(false);
                     const restaurant = restaurants.find((r) => r.id === e.target.value);
-                    setSelectedRestaurant(restaurant || null);
+                    setSelectedRestaurantForm(restaurant || null);
                   }
                 }}
                 label="Restaurant"
