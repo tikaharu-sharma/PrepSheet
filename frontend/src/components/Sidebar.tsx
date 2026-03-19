@@ -27,13 +27,15 @@ import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 
 import { useNavigate, useLocation } from 'react-router-dom'
 import { logoutMock } from '../lib/auth'
-import { useState} from "react";
 import { useRestaurant } from "../context/useRestaurant";
 
 import { useAuth } from "../context/AuthContext";
 import type { Role } from "../context/AuthTypes";
 
 import PrepSheetLogo from "../assets/PrepSheet.svg";
+
+
+import { useState } from "react";
 
 const drawerWidth = 260;
 const activeColor = "#4ea674";
