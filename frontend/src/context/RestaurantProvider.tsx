@@ -5,10 +5,8 @@ import { getRestaurants, type Restaurant } from "../pages/Restaurants";
 export const RestaurantProvider = ({ children }: { children: React.ReactNode }) => {
   const initialRestaurants = getRestaurants();
 
-  const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
-  const [selectedRestaurant, setSelectedRestaurant] = useState<Restaurant | null>(
-    initialRestaurants[0] || null
-  );
+  const [restaurants, setRestaurants] = useState<Restaurant[]>(initialRestaurants);
+  const [selectedRestaurant, setSelectedRestaurant] = useState<Restaurant | null>(null);
 
   return (
     <RestaurantContext.Provider
