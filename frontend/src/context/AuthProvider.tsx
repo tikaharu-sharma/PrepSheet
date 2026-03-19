@@ -10,7 +10,7 @@ export const AuthProvider: React.FC<Props> = ({ children }) => {
     id: "user-1",
     name: "Jane Doe",
     email: "jane@email.com",
-    role: "admin",
+    role: "manager",
   };
 
   return <AuthContext.Provider value={{ user }}>{children}</AuthContext.Provider>;

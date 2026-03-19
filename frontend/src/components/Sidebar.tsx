@@ -9,7 +9,8 @@ import {
   Avatar,
   IconButton,
   useTheme,
-  useMediaQuery
+  useMediaQuery,
+  MenuItem,
 } from "@mui/material";
 
 import HomeIcon from "@mui/icons-material/Home";
@@ -33,7 +34,6 @@ import { useAuth } from "../context/AuthContext";
 import type { Role } from "../context/AuthTypes";
 
 import PrepSheetLogo from "../assets/PrepSheet.svg";
-
 
 const drawerWidth = 260;
 const activeColor = "#4ea674";
@@ -67,21 +67,25 @@ export default function Sidebar({ mobileOpen, handleDrawerToggle }: SidebarProps
 		navigate('/login')
 	}
 
+  const handleLogoClick = () => {
+    navigate('/home')
+  }
+
 
 
 const menuItems: MenuItem[] = [
-  { text: "Dashboard", icon: <HomeIcon />, path: "/home", roles: ["admin", "manager", "user"] },
-  { text: "Sales Entry", icon: <ReceiptIcon />, path: "/sales-entry", roles: ["admin", "manager", "user"] },
-  { text: "Users", icon: <PeopleIcon />, path: "/users", roles: ["admin", "manager"] },
-  { text: "Reports", icon: <BarChartIcon />, path: "/reports", roles: ["admin", "manager"] },
-  { text: "Restaurants", icon: <StoreIcon />, path: "/restaurants", roles: ["admin"] },
-  { text: "Register", icon: <PersonAddIcon />, path: "/register", roles: ["admin", "manager"] },
-  { text: "Data Visualization", icon: <InsightsIcon />, path: "/visualization", roles: ["admin", "manager"] }
+  { text: "Dashboard", icon: <HomeIcon />, path: "/home", roles: ["manager", "employee"] },
+  { text: "Sales Entry", icon: <ReceiptIcon />, path: "/sales-entry", roles: ["manager", "employee"] },
+  { text: "Users", icon: <PeopleIcon />, path: "/users", roles: ["manager"] },
+  { text: "Reports", icon: <BarChartIcon />, path: "/reports", roles: ["manager"] },
+  { text: "Restaurants", icon: <StoreIcon />, path: "/restaurants", roles: ["manager"] },
+  { text: "Register", icon: <PersonAddIcon />, path: "/register", roles: ["manager"] },
+  { text: "Data Visualization", icon: <InsightsIcon />, path: "/visualization", roles: ["manager"] }
 ];
 
 const adminItems: MenuItem[] = [
-  { text: "Admin Role", icon: <AdminPanelSettingsIcon />, path: "/admin-role", roles: ["admin"] },
-  { text: "Settings", icon: <SettingsIcon />, path: "/settings", roles: ["admin"] }
+  { text: "Admin Role", icon: <AdminPanelSettingsIcon />, path: "/admin-role", roles: ["manager"] },
+  { text: "Settings", icon: <SettingsIcon />, path: "/settings", roles: ["manager"] }
 ];
 
 
@@ -134,19 +138,18 @@ const getItemStyle = (path: string) => ({
       {/* TOP SECTION*/}
       <Box>
         {/* LOGO */}
-        <Box sx={{ mb: 3 }}>
+        <Box sx={{ mb: 3, cursor: 'pointer' }} onClick={handleLogoClick}>
           <img src={PrepSheetLogo} alt="PrepSheet Logo" style={{ width: 140}} />
         </Box>
 
         {/* RESTAURANT SELECTOR */}
-        <Box sx={{ position: "relative" }}>
+        <Box sx={{ position: "relative", mb:2 }}>
             <Box
               onClick={() => setOpenDropdown(!openDropdown)}
               sx={{
                 display: "flex",
                 justifyContent: "space-between",
                 alignItems: "center",
-                mb: 2,
                 cursor: "pointer",
                 p: 1,
                 borderRadius: "8px",
