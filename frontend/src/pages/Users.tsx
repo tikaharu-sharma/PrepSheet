@@ -122,75 +122,69 @@ export const Users: React.FC = () => {
     const loadedRestaurants = getRestaurants();
     setRestaurants(loadedRestaurants)
 
-    // Sync assignments when restaurants change
-    if(loadedRestaurants.length > 0){
-      setAssignments((prevAssignments) => {
-      // Filter out assignments for deleted restaurants
-      const validAssignments = prevAssignments.filter((assignment) =>
-        loadedRestaurants.some((r) => r.id === assignment.restaurantId)
-      );
-
-      // Find new restaurants that don't have assignments yet
-      const newRestaurants = loadedRestaurants.filter(
-        (restaurant) =>
-          !prevAssignments.some((a) => a.restaurantId === restaurant.id)
-      );
-
-      // Create assignments for new restaurants with default employees
-      const defaultEmployeeIds = MOCK_EMPLOYEES.map((emp) => emp.id);
-      const newAssignments = newRestaurants.flatMap((restaurant, restaurantIndex) => {
-        // Assign 1 employee per new restaurant (cycling through employees)
-        const employeeId = defaultEmployeeIds[restaurantIndex % defaultEmployeeIds.length];
-        return {
-          id: `assign-${Date.now()}-${restaurantIndex}`,
-          restaurantId: restaurant.id,
-          employeeId,
-          status: 'active' as const,
-        };
-      });
-
-      return [...validAssignments, ...newAssignments];
-    });
-    }
-
     // Listen for storage changes from other tabs/windows
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === 'prepsheet_restaurants') {
         const updatedRestaurants = getRestaurants();
         setRestaurants(updatedRestaurants);
-
-        setAssignments((prevAssignments) => {
-          // Filter out assignments for deleted restaurants
-          const validAssignments = prevAssignments.filter((assignment) =>
-            updatedRestaurants.some((r) => r.id === assignment.restaurantId)
-          );
-
-          // Find new restaurants
-          const newRestaurants = updatedRestaurants.filter(
-            (restaurant) =>
-              !prevAssignments.some((a) => a.restaurantId === restaurant.id)
-          );
-
-          // Create assignments for new restaurants
-          const defaultEmployeeIds = MOCK_EMPLOYEES.map((emp) => emp.id);
-          const newAssignments = newRestaurants.flatMap((restaurant, restaurantIndex) => {
-            const employeeId = defaultEmployeeIds[restaurantIndex % defaultEmployeeIds.length];
-            return {
-              id: `assign-${Date.now()}-${restaurantIndex}`,
-              restaurantId: restaurant.id,
-              employeeId,
-              status: 'active' as const,
-            };
-          });
-
-          return [...validAssignments, ...newAssignments];
-        });
       }
     };
 
     window.addEventListener('storage', handleStorageChange);
     return () => window.removeEventListener('storage', handleStorageChange);
   }, [setRestaurants]);
+
+  // Sync assignments only when restaurant data actually changes, with proper equality checks.
+  useEffect(() => {
+    setAssignments((currentAssignments) => {
+      if (restaurants.length === 0) return currentAssignments;
+
+      // Filter out assignments for deleted restaurants
+      const validAssignments = currentAssignments.filter((assignment) =>
+        restaurants.some((r) => r.id === assignment.restaurantId)
+      );
+
+      // Find new restaurants that don't have assignments yet
+      const newRestaurants = restaurants.filter(
+        (restaurant) =>
+          !currentAssignments.some((a) => a.restaurantId === restaurant.id)
+      );
+
+      // Early exit: no deletions and no new restaurants = no change needed
+      if (validAssignments.length === currentAssignments.length && newRestaurants.length === 0) {
+        return currentAssignments;
+      }
+
+      // Create assignments for new restaurants with default employees
+      const defaultEmployeeIds = MOCK_EMPLOYEES.map((emp) => emp.id);
+      const newAssignments = newRestaurants.map((restaurant, restaurantIndex) => {
+        const employeeId = defaultEmployeeIds[restaurantIndex % defaultEmployeeIds.length];
+        return {
+          id: `assign-auto-${restaurant.id}`,
+          restaurantId: restaurant.id,
+          employeeId,
+          status: 'active' as const,
+        };
+      });
+
+      const nextAssignments = [...validAssignments, ...newAssignments];
+
+      // Final check: verify the new array is actually different from current
+      // This prevents setState calls when content hasn't meaningfully changed
+      const hasRealChange = 
+        nextAssignments.length !== currentAssignments.length ||
+        nextAssignments.some((next, idx) => {
+          const current = currentAssignments[idx];
+          return !current || next.id !== current.id || next.restaurantId !== current.restaurantId || next.employeeId !== current.employeeId || next.status !== current.status;
+        });
+
+      if (!hasRealChange) {
+        return currentAssignments;
+      }
+
+      return nextAssignments;
+    });
+  }, [restaurants]);
 
   // =========================================================================
   // HELPER FUNCTIONS
@@ -226,7 +220,7 @@ export const Users: React.FC = () => {
     if (!searchTerm) return result;
 
     const lowerSearchTerm = searchTerm.toLowerCase();
-    return assignments.filter((assignment) => {
+    return result.filter((assignment) => {
       const restaurantName = getRestaurantName(assignment.restaurantId).toLowerCase();
       const employee = getEmployeeInfo(assignment.employeeId);
       const employeeName = employee?.name.toLowerCase() || '';

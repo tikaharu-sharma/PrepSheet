@@ -12,7 +12,7 @@ import Divider from '@mui/material/Divider'
 import { useTheme, useMediaQuery } from '@mui/material'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { logoutMock } from '../lib/auth'
+import { clearAuthSession } from '../lib/auth'
 
 interface NavbarProps {
   handleDrawerToggle: () => void;
@@ -35,7 +35,7 @@ export default function Navbar({ handleDrawerToggle }: NavbarProps) {
   };
 
   const handleLogout = () => {
-    logoutMock();
+    clearAuthSession();
     navigate('/login');
     handleMenuClose();
   };

@@ -1,7 +1,7 @@
 export type Role = "manager" | "employee";
 
 export type User = {
-  id: string;
+  id: number;
   name: string;
   email: string;
   role: Role;

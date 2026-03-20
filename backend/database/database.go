@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"log"
 
+	"golang.org/x/crypto/bcrypt"
 	_ "modernc.org/sqlite"
 )
 
@@ -30,7 +31,40 @@ func InitDB() {
 	}
 
 	createTables()
+	seedAdminUser()
 	log.Println("Database initialized successfully")
+}
+
+func seedAdminUser() {
+	const userName = "admin"
+	const userEmail = "admin@example.com"
+	const userPassword = "admin"
+	const userRole = "manager"
+
+	var exists int
+	err := DB.QueryRow("SELECT COUNT(*) FROM users WHERE name = ? OR email = ?", userName, userEmail).Scan(&exists)
+	if err != nil {
+		log.Printf("Failed to check admin user existence: %v", err)
+		return
+	}
+
+	if exists > 0 {
+		return
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(userPassword), bcrypt.DefaultCost)
+	if err != nil {
+		log.Printf("Failed to hash admin password: %v", err)
+		return
+	}
+
+	_, err = DB.Exec("INSERT INTO users (name, email, password, role, status) VALUES (?, ?, ?, ?, ?)", userName, userEmail, string(hash), userRole, "active")
+	if err != nil {
+		log.Printf("Failed to seed admin user: %v", err)
+		return
+	}
+
+	log.Println("Admin user created: admin/admin")
 }
 
 func createTables() {
