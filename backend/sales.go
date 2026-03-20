@@ -9,13 +9,10 @@ import (
 )
 
 // AddSale allows an employee to log a daily sales entry.
-// Requires: employee role (enforced by middleware)
 func AddSale(w http.ResponseWriter, r *http.Request) {
-	// Get user info from context (set by auth middleware)
 	userID := r.Context().Value("user_id").(int)
 	role := r.Context().Value("role").(string)
 
-	// Only employees can add sales
 	if role != "employee" {
 		http.Error(w, `{"error": "Only employees can add sales entries"}`, http.StatusForbidden)
 		return
@@ -27,18 +24,33 @@ func AddSale(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate required fields
-	if req.Date == "" || req.ItemName == "" || req.Quantity <= 0 || req.UnitPrice <= 0 {
-		http.Error(w, `{"error": "Date, item_name, quantity (>0), and unit_price (>0) are required"}`, http.StatusBadRequest)
+	if req.Date == "" || req.Restaurant == "" {
+		http.Error(w, `{"error": "Date and restaurant are required"}`, http.StatusBadRequest)
 		return
 	}
 
-	totalPrice := float64(req.Quantity) * req.UnitPrice
+	// Look up restaurant by name, create if not found
+	var restaurantID int
+	err := database.DB.QueryRow("SELECT id FROM restaurants WHERE name = ?", req.Restaurant).Scan(&restaurantID)
+	if err != nil {
+		result, insertErr := database.DB.Exec("INSERT INTO restaurants (name) VALUES (?)", req.Restaurant)
+		if insertErr != nil {
+			http.Error(w, `{"error": "Failed to find or create restaurant"}`, http.StatusInternalServerError)
+			return
+		}
+		id, _ := result.LastInsertId()
+		restaurantID = int(id)
+	}
 
+	// Insert the sale
 	result, err := database.DB.Exec(
-		`INSERT INTO sales (employee_id, date, item_name, quantity, unit_price, total_price, notes) 
-		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		userID, req.Date, req.ItemName, req.Quantity, req.UnitPrice, totalPrice, req.Notes,
+		`INSERT INTO sales (employee_id, restaurant_id, date, lunch_head_count, lunch_sale,
+		 dinner_head_count, dinner_sale, credit_sale, reji_money, note)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		userID, restaurantID, req.Date,
+		req.LunchHeadCount, req.LunchSale,
+		req.DinnerHeadCount, req.DinnerSale,
+		req.CreditSale, req.RejiMoney, req.Note,
 	)
 	if err != nil {
 		http.Error(w, `{"error": "Failed to add sale entry"}`, http.StatusInternalServerError)
@@ -47,61 +59,68 @@ func AddSale(w http.ResponseWriter, r *http.Request) {
 
 	saleID, _ := result.LastInsertId()
 
+	// Insert expenditures
+	for _, exp := range req.Expenditures {
+		_, err := database.DB.Exec(
+			"INSERT INTO expenditures (sale_id, title, amount) VALUES (?, ?, ?)",
+			saleID, exp.Title, exp.Amount,
+		)
+		if err != nil {
+			http.Error(w, `{"error": "Failed to add expenditure"}`, http.StatusInternalServerError)
+			return
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"message":     "Sale entry added successfully",
-		"sale_id":     saleID,
-		"total_price": totalPrice,
+		"message": "Sale entry added successfully",
+		"sale_id": saleID,
 	})
 }
 
-// GetSales allows a manager to view all sales entries. Supports optional date filters.
-// Query params: ?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD
-// Requires: manager role (enforced by middleware)
+// GetSales allows a manager to view all sales entries with optional date filters.
 func GetSales(w http.ResponseWriter, r *http.Request) {
 	role := r.Context().Value("role").(string)
 
-	// Only managers can view all sales
 	if role != "manager" {
-		http.Error(w, `{"error": "Only managers can view sales"}`, http.StatusForbidden)
+		http.Error(w, `{"error": "Only managers can view all sales"}`, http.StatusForbidden)
 		return
 	}
 
 	startDate := r.URL.Query().Get("start_date")
 	endDate := r.URL.Query().Get("end_date")
 
-	var sales []models.Sale
-	var err error
-
 	query := `
-		SELECT s.id, s.employee_id, s.date, s.item_name, s.quantity, 
-		       s.unit_price, s.total_price, s.notes, s.created_at
-		FROM sales s`
+		SELECT s.id, s.employee_id, s.restaurant_id, r.name, s.date,
+		       s.lunch_head_count, s.lunch_sale, s.dinner_head_count, s.dinner_sale,
+		       s.credit_sale, s.reji_money, COALESCE(s.note, ''), s.created_at
+		FROM sales s
+		JOIN restaurants r ON s.restaurant_id = r.id`
 
+	var args []interface{}
 	if startDate != "" && endDate != "" {
-		query += " WHERE s.date BETWEEN ? AND ? ORDER BY s.date DESC"
-		sqlRows, qErr := database.DB.Query(query, startDate, endDate)
-		if qErr != nil {
-			http.Error(w, `{"error": "Failed to fetch sales"}`, http.StatusInternalServerError)
-			return
-		}
-		defer sqlRows.Close()
-		sales, err = scanSales(sqlRows)
-	} else {
-		query += " ORDER BY s.date DESC"
-		sqlRows, qErr := database.DB.Query(query)
-		if qErr != nil {
-			http.Error(w, `{"error": "Failed to fetch sales"}`, http.StatusInternalServerError)
-			return
-		}
-		defer sqlRows.Close()
-		sales, err = scanSales(sqlRows)
+		query += " WHERE s.date BETWEEN ? AND ?"
+		args = append(args, startDate, endDate)
 	}
+	query += " ORDER BY s.date DESC"
 
+	rows, err := database.DB.Query(query, args...)
+	if err != nil {
+		http.Error(w, `{"error": "Failed to fetch sales"}`, http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	sales, err := scanSales(rows)
 	if err != nil {
 		http.Error(w, `{"error": "Failed to parse sales data"}`, http.StatusInternalServerError)
 		return
+	}
+
+	// Load expenditures for each sale
+	for i := range sales {
+		sales[i].Expenditures, _ = getExpenditures(sales[i].ID)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -113,29 +132,36 @@ func GetMySales(w http.ResponseWriter, r *http.Request) {
 	userID := r.Context().Value("user_id").(int)
 
 	query := `
-		SELECT id, employee_id, date, item_name, quantity, 
-		       unit_price, total_price, notes, created_at
-		FROM sales WHERE employee_id = ? ORDER BY date DESC`
+		SELECT s.id, s.employee_id, s.restaurant_id, r.name, s.date,
+		       s.lunch_head_count, s.lunch_sale, s.dinner_head_count, s.dinner_sale,
+		       s.credit_sale, s.reji_money, COALESCE(s.note, ''), s.created_at
+		FROM sales s
+		JOIN restaurants r ON s.restaurant_id = r.id
+		WHERE s.employee_id = ?
+		ORDER BY s.date DESC`
 
-	sqlRows, err := database.DB.Query(query, userID)
+	rows, err := database.DB.Query(query, userID)
 	if err != nil {
 		http.Error(w, `{"error": "Failed to fetch sales"}`, http.StatusInternalServerError)
 		return
 	}
-	defer sqlRows.Close()
+	defer rows.Close()
 
-	sales, err := scanSales(sqlRows)
+	sales, err := scanSales(rows)
 	if err != nil {
 		http.Error(w, `{"error": "Failed to parse sales data"}`, http.StatusInternalServerError)
 		return
+	}
+
+	for i := range sales {
+		sales[i].Expenditures, _ = getExpenditures(sales[i].ID)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(sales)
 }
 
-// GetMonthlyReport returns aggregated monthly sales data for the manager.
-// Query param: ?month=YYYY-MM
+// GetMonthlyReport returns aggregated monthly sales data.
 func GetMonthlyReport(w http.ResponseWriter, r *http.Request) {
 	role := r.Context().Value("role").(string)
 
@@ -147,31 +173,31 @@ func GetMonthlyReport(w http.ResponseWriter, r *http.Request) {
 	month := r.URL.Query().Get("month")
 
 	var report models.MonthlySalesReport
-	var query string
 	var err error
 
 	if month != "" {
-		query = `
+		query := `
 			SELECT COALESCE(strftime('%Y-%m', date), ?) as month,
-			       COALESCE(SUM(total_price), 0) as total_sales,
-			       COALESCE(SUM(quantity), 0) as total_items,
+			       COALESCE(SUM(lunch_sale + dinner_sale), 0) as total_sales,
+			       COALESCE(SUM(lunch_sale), 0) as total_lunch,
+			       COALESCE(SUM(dinner_sale), 0) as total_dinner,
 			       COUNT(*) as entry_count
 			FROM sales
 			WHERE strftime('%Y-%m', date) = ?`
 		err = database.DB.QueryRow(query, month, month).Scan(
-			&report.Month, &report.TotalSales, &report.TotalItems, &report.EntryCount,
+			&report.Month, &report.TotalSales, &report.TotalLunch, &report.TotalDinner, &report.EntryCount,
 		)
 	} else {
-		// Default to current month
-		query = `
+		query := `
 			SELECT COALESCE(strftime('%Y-%m', date), strftime('%Y-%m', 'now')) as month,
-			       COALESCE(SUM(total_price), 0) as total_sales,
-			       COALESCE(SUM(quantity), 0) as total_items,
+			       COALESCE(SUM(lunch_sale + dinner_sale), 0) as total_sales,
+			       COALESCE(SUM(lunch_sale), 0) as total_lunch,
+			       COALESCE(SUM(dinner_sale), 0) as total_dinner,
 			       COUNT(*) as entry_count
 			FROM sales
 			WHERE strftime('%Y-%m', date) = strftime('%Y-%m', 'now')`
 		err = database.DB.QueryRow(query).Scan(
-			&report.Month, &report.TotalSales, &report.TotalItems, &report.EntryCount,
+			&report.Month, &report.TotalSales, &report.TotalLunch, &report.TotalDinner, &report.EntryCount,
 		)
 	}
 
@@ -184,15 +210,19 @@ func GetMonthlyReport(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(report)
 }
 
-// scanSales is a helper that scans SQL rows into Sale structs.
-func scanSales(rows interface{ Next() bool; Scan(...interface{}) error }) ([]models.Sale, error) {
+// scanSales scans SQL rows into Sale structs.
+func scanSales(rows interface {
+	Next() bool
+	Scan(...interface{}) error
+}) ([]models.Sale, error) {
 	var sales []models.Sale
 	for rows.Next() {
 		var sale models.Sale
 		err := rows.Scan(
-			&sale.ID, &sale.EmployeeID, &sale.Date, &sale.ItemName,
-			&sale.Quantity, &sale.UnitPrice, &sale.TotalPrice,
-			&sale.Notes, &sale.CreatedAt,
+			&sale.ID, &sale.EmployeeID, &sale.RestaurantID, &sale.RestaurantName,
+			&sale.Date, &sale.LunchHeadCount, &sale.LunchSale,
+			&sale.DinnerHeadCount, &sale.DinnerSale,
+			&sale.CreditSale, &sale.RejiMoney, &sale.Note, &sale.CreatedAt,
 		)
 		if err != nil {
 			return nil, err
@@ -200,7 +230,29 @@ func scanSales(rows interface{ Next() bool; Scan(...interface{}) error }) ([]mod
 		sales = append(sales, sale)
 	}
 	if sales == nil {
-		sales = []models.Sale{} // return empty array instead of null
+		sales = []models.Sale{}
 	}
 	return sales, nil
+}
+
+// getExpenditures fetches expenditures for a given sale ID.
+func getExpenditures(saleID int) ([]models.Expenditure, error) {
+	rows, err := database.DB.Query("SELECT id, sale_id, title, amount FROM expenditures WHERE sale_id = ?", saleID)
+	if err != nil {
+		return []models.Expenditure{}, err
+	}
+	defer rows.Close()
+
+	var expenditures []models.Expenditure
+	for rows.Next() {
+		var exp models.Expenditure
+		if err := rows.Scan(&exp.ID, &exp.SaleID, &exp.Title, &exp.Amount); err != nil {
+			return nil, err
+		}
+		expenditures = append(expenditures, exp)
+	}
+	if expenditures == nil {
+		expenditures = []models.Expenditure{}
+	}
+	return expenditures, nil
 }
