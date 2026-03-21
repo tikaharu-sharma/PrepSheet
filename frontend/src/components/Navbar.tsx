@@ -13,6 +13,7 @@ import { useTheme, useMediaQuery } from '@mui/material'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { clearAuthSession } from '../lib/auth'
+import { useAuth } from '../context/AuthContext'
 
 interface NavbarProps {
   handleDrawerToggle: () => void;
@@ -22,6 +23,7 @@ export default function Navbar({ handleDrawerToggle }: NavbarProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const navigate = useNavigate();
+  const { user } = useAuth();
   
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const open = Boolean(anchorEl);
@@ -105,10 +107,10 @@ export default function Navbar({ handleDrawerToggle }: NavbarProps) {
       >
         <Box sx={{ px: 2, py: 1 }}>
           <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>
-            Jane Doe
+            {user?.name || 'User'}
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            jane@email.com
+            {user?.email || 'user@example.com'}
           </Typography>
         </Box>
         <Divider />
