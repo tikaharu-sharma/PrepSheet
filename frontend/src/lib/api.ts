@@ -77,9 +77,9 @@ export async function createRestaurant(name: string): Promise<Restaurant> {
   });
 
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ message: 'Failed to create restaurant' }));
+    const errorData = await response.json().catch(() => ({ error: 'Failed to create restaurant' }));
     throw {
-      message: errorData.message || 'Failed to create restaurant',
+      message: errorData.message || errorData.error || 'Failed to create restaurant',
       status: response.status,
     } as ApiError;
   }
@@ -95,9 +95,9 @@ export async function removeRestaurant(id: string | number): Promise<void> {
   });
 
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ message: 'Failed to delete restaurant' }));
+    const errorData = await response.json().catch(() => ({ error: 'Failed to delete restaurant' }));
     throw {
-      message: errorData.message || 'Failed to delete restaurant',
+      message: errorData.message || errorData.error || 'Failed to delete restaurant',
       status: response.status,
     } as ApiError;
   }
@@ -113,9 +113,9 @@ export async function updateRestaurant(id: number, name: string): Promise<Restau
   });
 
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ message: 'Failed to update restaurant' }));
+    const errorData = await response.json().catch(() => ({ error: 'Failed to update restaurant' }));
     throw {
-      message: errorData.message || 'Failed to update restaurant',
+      message: errorData.message || errorData.error || 'Failed to update restaurant',
       status: response.status,
     } as ApiError;
   }

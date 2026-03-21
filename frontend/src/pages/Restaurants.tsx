@@ -87,8 +87,17 @@ export default function Restaurants() {
       setIsEditMode(false)
       setRestaurantToEdit(null)
       setError(null)
-    } catch {
-      setError(`Unable to ${isEditMode ? 'update' : 'add'} restaurant. Please try again.`)
+    } catch (err: unknown) {
+      let message = `Unable to ${isEditMode ? 'update' : 'add'} restaurant. Please try again.`
+      if (err instanceof Error) {
+        message = err.message
+      } else if (typeof err === 'object' && err !== null && 'message' in err) {
+        const maybeMessage = (err as { message?: string }).message
+        if (typeof maybeMessage === 'string') {
+          message = maybeMessage
+        }
+      }
+      setError(`Unable to ${isEditMode ? 'update' : 'add'} restaurant. ${message}`)
     } finally {
       setLoading(false)
     }
@@ -177,7 +186,7 @@ export default function Restaurants() {
                     <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>
                       Restaurant Name
                     </TableCell>
-                    <TableCell align="right" sx={{ color: 'white', fontWeight: 'bold' }}>
+                    <TableCell align="center" sx={{ color: 'white', fontWeight: 'bold' }}>
                       Actions
                     </TableCell>
                   </TableRow>
@@ -192,8 +201,8 @@ export default function Restaurants() {
                       }}
                     >
                       <TableCell>{restaurant.name}</TableCell>
-                      <TableCell align="right">
-                        <Stack direction="row" spacing={0.5}>
+                      <TableCell align="center">
+                        <Stack direction="row" spacing={0.5} sx={{ justifyContent: 'center' }}>
                           <IconButton
                             color="primary"
                             size="small"

@@ -23,6 +23,7 @@ func main() {
 	// ─── Restaurant routes ──────────────────────────────────────────────
 	mux.HandleFunc("/api/restaurants", middleware.AuthMiddleware(handlers.GetRestaurants))
 	mux.HandleFunc("/api/restaurants/add", middleware.AuthMiddleware(handlers.AddRestaurant))
+	mux.HandleFunc("/api/restaurants/update", middleware.AuthMiddleware(handlers.UpdateRestaurant))
 	mux.HandleFunc("/api/restaurants/delete", middleware.AuthMiddleware(handlers.DeleteRestaurant))
 
 	// ─── Sales routes ───────────────────────────────────────────────────
