@@ -3,7 +3,7 @@ import { createContext, useContext } from "react";
 import type { User } from "./AuthTypes";
 
 export type AuthContextType = {
-  user: User;
+  user: User | null;
 };
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);

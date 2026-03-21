@@ -1,17 +1,24 @@
 import React, { useState } from 'react'
-import { Box, Paper, Stack, Typography, TextField, Button, Alert } from '@mui/material'
+import { Box, Paper, Stack, Typography, TextField, Button, Alert, InputAdornment, IconButton } from '@mui/material'
+import { Visibility, VisibilityOff } from '@mui/icons-material'
 import { useNavigate } from 'react-router-dom';
-import { loginMock } from '../lib/auth';
+import { setAuthSession } from '../lib/auth';
+import { loginUser } from '../lib/api';
 
 
 export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleClickShowPassword = () => {
+    setShowPassword(!showPassword);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!email.trim() || !password.trim()) {
@@ -21,9 +28,24 @@ export default function Login() {
 
     setError(null);
 
-    // mock login for now
-    loginMock();
-    navigate('/home');};
+    try {
+      const response = await loginUser(email, password);
+      setAuthSession(response.token, response.user);
+      navigate('/home');
+    } catch (err: unknown) {
+      const error = err as { status?: number; message?: string };
+      if (error.status === 401) {
+        setError('Invalid email or password.');
+      } else if (error.status === 403) {
+        setError('Account is disabled. Please contact your administrator.');
+      } else {
+        setError(error.message || 'Login failed. Please try again.');
+      }
+      // Clear input fields on login failure
+      setEmail('');
+      setPassword('');
+    }
+  };
 
 
   return (
@@ -46,21 +68,34 @@ export default function Login() {
           )}
 
           <TextField
-            label="Email"
-            type="email"
+            label="Email or Username"
+            type="text"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             fullWidth
-            autoComplete="email"
+            autoComplete="username"
           />
 
           <TextField
             label="Password"
-            type="password"
+            type={showPassword ? 'text' : 'password'}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             fullWidth
             autoComplete="current-password"
+            InputProps={{
+              endAdornment: (
+                <InputAdornment position="end">
+                  <IconButton
+                    onClick={handleClickShowPassword}
+                    edge="end"
+                    tabIndex={-1}
+                  >
+                    {showPassword ? <VisibilityOff /> : <Visibility />}
+                  </IconButton>
+                </InputAdornment>
+              ),
+            }}
           />
 
           <Button type="submit" variant="contained" color="primary" fullWidth sx={{ py: 1.2 }}>

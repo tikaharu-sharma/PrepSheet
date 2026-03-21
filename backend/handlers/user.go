@@ -76,13 +76,14 @@ func Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.Email == "" || req.Password == "" {
-		http.Error(w, `{"error": "Email and password are required"}`, http.StatusBadRequest)
+		http.Error(w, `{"error": "Email/Username and password are required"}`, http.StatusBadRequest)
 		return
 	}
 
 	var user models.User
 	err := database.DB.QueryRow(
-		"SELECT id, name, email, password, role, status FROM users WHERE email = ?",
+		"SELECT id, name, email, password, role, status FROM users WHERE email = ? OR name = ?",
+		req.Email,
 		req.Email,
 	).Scan(&user.ID, &user.Name, &user.Email, &user.Password, &user.Role, &user.Status)
 	if err != nil {

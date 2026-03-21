@@ -25,8 +25,8 @@ import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
 import LogoutIcon from "@mui/icons-material/Logout";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 
-import { useNavigate, useLocation } from 'react-router-dom'
-import { logoutMock } from '../lib/auth'
+import { useNavigate, useLocation, Link as RouterLink } from 'react-router-dom'
+import { clearAuthSession } from '../lib/auth'
 import { useRestaurant } from "../context/useRestaurant";
 
 import { useAuth } from "../context/AuthContext";
@@ -59,13 +59,13 @@ export default function Sidebar({ mobileOpen, handleDrawerToggle }: SidebarProps
   const location = useLocation()
 
   const { user } = useAuth();
-  const currentUserRole = user.role;
+  const currentUserRole = user?.role || 'employee';
 
   const [openDropdown, setOpenDropdown] = useState(false)
   const { restaurants, selectedRestaurant, setSelectedRestaurant } = useRestaurant()
 
 	const handleLogout = () => {
-		logoutMock()
+		clearAuthSession()
 		navigate('/login')
 	}
 
@@ -224,7 +224,8 @@ const getItemStyle = (path: string) => ({
           {filteredMenuItems.map((item) => (
             <ListItemButton
               key={item.text}
-              onClick={() => navigate(item.path)}
+              component={RouterLink}
+              to={item.path}
               sx={getItemStyle(item.path)}
             >
               <ListItemIcon
@@ -252,7 +253,8 @@ const getItemStyle = (path: string) => ({
                 {filteredAdminItems.map((item) => (
                   <ListItemButton
                     key={item.text}
-                    onClick={() => navigate(item.path)}
+                    component={RouterLink}
+                    to={item.path}
                     sx={getItemStyle(item.path)}
                   >
                     <ListItemIcon
@@ -284,8 +286,8 @@ const getItemStyle = (path: string) => ({
         <Avatar />
 
         <Box sx={{ flexGrow: 1 }}>
-          <Typography variant="body2">{user.name}</Typography>
-          <Typography variant="caption">{user.email}</Typography>
+          <Typography variant="body2">{user?.name || 'User'}</Typography>
+          <Typography variant="caption">{user?.email || 'user@example.com'}</Typography>
         </Box>
 
         <IconButton onClick = {handleLogout}>
