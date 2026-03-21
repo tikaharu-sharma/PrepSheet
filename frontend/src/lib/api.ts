@@ -104,3 +104,22 @@ export async function removeRestaurant(id: string | number): Promise<void> {
 
   return;
 }
+
+export async function updateRestaurant(id: number, name: string): Promise<Restaurant> {
+  const response = await fetch(`${API_BASE_URL}/restaurants/update`, {
+    method: 'PUT',
+    headers: authHeaders(),
+    body: JSON.stringify({ id, name }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ message: 'Failed to update restaurant' }));
+    throw {
+      message: errorData.message || 'Failed to update restaurant',
+      status: response.status,
+    } as ApiError;
+  }
+
+  const data = await response.json();
+  return data as Restaurant;
+}

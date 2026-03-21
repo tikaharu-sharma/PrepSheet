@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { RestaurantContext } from "./RestaurantContext";
 import type { Restaurant } from "../lib/types";
-import { fetchRestaurants, createRestaurant, removeRestaurant } from "../lib/api";
+import { fetchRestaurants, createRestaurant, updateRestaurant as updateRestaurantApi, removeRestaurant } from "../lib/api";
 
 export const RestaurantProvider = ({ children }: { children: React.ReactNode }) => {
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
@@ -26,6 +26,15 @@ export const RestaurantProvider = ({ children }: { children: React.ReactNode }) 
     return newRestaurant;
   }, []);
 
+  const updateRestaurant = useCallback(async (id: number, name: string): Promise<Restaurant> => {
+    const updatedRestaurant = await updateRestaurantApi(id, name);
+    setRestaurants((prev) => prev.map((r) => r.id === id ? updatedRestaurant : r));
+    if (selectedRestaurant?.id === id) {
+      setSelectedRestaurant(updatedRestaurant);
+    }
+    return updatedRestaurant;
+  }, [selectedRestaurant]);
+
   const deleteRestaurant = useCallback(async (id: number) => {
     await removeRestaurant(id);
     setRestaurants((prev) => prev.filter((r) => r.id !== id));
@@ -48,6 +57,7 @@ export const RestaurantProvider = ({ children }: { children: React.ReactNode }) 
         setRestaurants,
         refreshRestaurants,
         addRestaurant,
+        updateRestaurant,
         deleteRestaurant,
       }}
     >

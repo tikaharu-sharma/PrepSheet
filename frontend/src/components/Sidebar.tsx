@@ -23,19 +23,14 @@ import InsightsIcon from "@mui/icons-material/Insights";
 import SettingsIcon from "@mui/icons-material/Settings";
 import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
 import LogoutIcon from "@mui/icons-material/Logout";
-import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
-
 import { useNavigate, useLocation, Link as RouterLink } from 'react-router-dom'
 import { clearAuthSession } from '../lib/auth'
-import { useRestaurant } from "../context/useRestaurant";
 
 import { useAuth } from "../context/AuthContext";
 import type { Role } from "../context/AuthTypes";
 
 import PrepSheetLogo from "../assets/PrepSheet.svg";
 
-
-import { useState } from "react";
 
 const drawerWidth = 260;
 const activeColor = "#4ea674";
@@ -61,8 +56,7 @@ export default function Sidebar({ mobileOpen, handleDrawerToggle }: SidebarProps
   const { user } = useAuth();
   const currentUserRole = user?.role || 'employee';
 
-  const [openDropdown, setOpenDropdown] = useState(false)
-  const { restaurants, selectedRestaurant, setSelectedRestaurant } = useRestaurant()
+
 
 	const handleLogout = () => {
 		clearAuthSession()
@@ -144,80 +138,7 @@ const getItemStyle = (path: string) => ({
           <img src={PrepSheetLogo} alt="PrepSheet Logo" style={{ width: 140}} />
         </Box>
 
-        {/* RESTAURANT SELECTOR */}
-        <Box sx={{ position: "relative", mb:2 }}>
-            <Box
-              onClick={() => setOpenDropdown(!openDropdown)}
-              sx={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                cursor: "pointer",
-                p: 1,
-                borderRadius: "8px",
-                "&:hover": { backgroundColor: "rgba(0,0,0,0.05)" }
-              }}
-            >
-              <Typography>
-                {selectedRestaurant ? selectedRestaurant.name : "All Restaurants"}
-              </Typography>
-              <KeyboardArrowDownIcon />
-            </Box>
 
-            {openDropdown && (
-              <Box
-                sx={{
-                  position: "absolute",
-                  top: "100%",
-                  left: 0,
-                  right: 0,
-                  backgroundColor: "white",
-                  boxShadow: 3,
-                  borderRadius: "8px",
-                  zIndex: 10,
-                  maxHeight: 200,
-                  overflowY: "auto"
-                }}
-              >
-                {/* ALL OPTION */}
-                <Box
-                  onClick={() => {
-                    setSelectedRestaurant(null);
-                    setOpenDropdown(false);
-                  }}
-                  sx={{
-                    p: 1,
-                    fontWeight: 500,
-                    cursor: "pointer",
-                    "&:hover": { backgroundColor: "rgba(0,0,0,0.05)" }
-                  }}
-                >
-                  All Restaurants
-                </Box>
-
-                {restaurants.map((r) => (
-                  <Box
-                    key={r.id}
-                    onClick={() => {
-                      setSelectedRestaurant(r);
-                      setOpenDropdown(false);
-                    }}
-                    sx={{
-                      p: 1,
-                      cursor: "pointer",
-                      backgroundColor:
-                        selectedRestaurant?.id === r.id
-                          ? "rgba(78,166,116,0.15)"
-                          : "transparent",
-                      "&:hover": { backgroundColor: "rgba(0,0,0,0.05)" }
-                    }}
-                  >
-                    {r.name}
-                  </Box>
-                ))}
-              </Box>
-            )}
-          </Box>
 
         {/* MAIN MENU */}
         <List>

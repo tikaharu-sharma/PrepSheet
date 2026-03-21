@@ -24,13 +24,16 @@ import {
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import DeleteIcon from '@mui/icons-material/Delete'
+import EditIcon from '@mui/icons-material/Edit'
 import { useRestaurant } from '../context/useRestaurant'
+import type { Restaurant } from '../lib/types'
 
 export default function Restaurants() {
   const {
     restaurants,
     refreshRestaurants,
     addRestaurant,
+    updateRestaurant,
     deleteRestaurant,
   } = useRestaurant()
 
@@ -40,6 +43,8 @@ export default function Restaurants() {
   const [error, setError] = useState<string | null>(null)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [restaurantToDelete, setRestaurantToDelete] = useState<{ id: number; name: string } | null>(null)
+  const [isEditMode, setIsEditMode] = useState(false)
+  const [restaurantToEdit, setRestaurantToEdit] = useState<Restaurant | null>(null)
 
   useEffect(() => {
     let isMounted = true
@@ -72,12 +77,18 @@ export default function Restaurants() {
 
     try {
       setLoading(true)
-      await addRestaurant(newRestaurantName.trim())
+      if (isEditMode && restaurantToEdit) {
+        await updateRestaurant(restaurantToEdit.id, newRestaurantName.trim())
+      } else {
+        await addRestaurant(newRestaurantName.trim())
+      }
       setNewRestaurantName('')
       setOpenDialog(false)
+      setIsEditMode(false)
+      setRestaurantToEdit(null)
       setError(null)
     } catch {
-      setError('Unable to add restaurant. Please try again.')
+      setError(`Unable to ${isEditMode ? 'update' : 'add'} restaurant. Please try again.`)
     } finally {
       setLoading(false)
     }
@@ -109,9 +120,25 @@ export default function Restaurants() {
     setRestaurantToDelete(null)
   }
 
+  const handleEditRestaurant = (restaurant: Restaurant) => {
+    setRestaurantToEdit(restaurant)
+    setNewRestaurantName(restaurant.name)
+    setIsEditMode(true)
+    setOpenDialog(true)
+  }
+
+  const handleAddClick = () => {
+    setIsEditMode(false)
+    setRestaurantToEdit(null)
+    setNewRestaurantName('')
+    setOpenDialog(true)
+  }
+
   const handleDialogClose = () => {
     setNewRestaurantName('')
     setOpenDialog(false)
+    setIsEditMode(false)
+    setRestaurantToEdit(null)
   }
 
   return (
@@ -126,7 +153,7 @@ export default function Restaurants() {
               variant="contained"
               color="primary"
               startIcon={<AddIcon />}
-              onClick={() => setOpenDialog(true)}
+              onClick={handleAddClick}
             >
               Add Restaurant
             </Button>
@@ -166,14 +193,24 @@ export default function Restaurants() {
                     >
                       <TableCell>{restaurant.name}</TableCell>
                       <TableCell align="right">
-                        <IconButton
-                          color="error"
-                          size="small"
-                          onClick={() => handleDeleteRestaurant(restaurant.id, restaurant.name)}
-                          title="Delete restaurant"
-                        >
-                          <DeleteIcon fontSize="small" />
-                        </IconButton>
+                        <Stack direction="row" spacing={0.5}>
+                          <IconButton
+                            color="primary"
+                            size="small"
+                            onClick={() => handleEditRestaurant(restaurant)}
+                            title="Edit restaurant"
+                          >
+                            <EditIcon fontSize="small" />
+                          </IconButton>
+                          <IconButton
+                            color="error"
+                            size="small"
+                            onClick={() => handleDeleteRestaurant(restaurant.id, restaurant.name)}
+                            title="Delete restaurant"
+                          >
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        </Stack>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -188,9 +225,9 @@ export default function Restaurants() {
         </Stack>
       </Card>
 
-      {/* Add Restaurant Dialog */}
+      {/* Add/Edit Restaurant Dialog */}
       <Dialog open={openDialog} onClose={handleDialogClose} maxWidth="sm" fullWidth>
-        <DialogTitle>Add New Restaurant</DialogTitle>
+        <DialogTitle>{isEditMode ? 'Edit Restaurant' : 'Add New Restaurant'}</DialogTitle>
         <DialogContent sx={{ pt: 3, pb: 1 }}>
           <Stack spacing={2}>
             <TextField
@@ -220,7 +257,7 @@ export default function Restaurants() {
                 fullWidth
                 onClick={handleAddRestaurant}
               >
-                Add
+                {isEditMode ? 'Update' : 'Add'}
               </Button>
             </Stack>
           </Stack>

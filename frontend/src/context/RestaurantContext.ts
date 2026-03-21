@@ -8,6 +8,7 @@ export interface RestaurantContextType {
   setRestaurants: (r: Restaurant[]) => void;
   refreshRestaurants: () => Promise<void>;
   addRestaurant: (name: string) => Promise<Restaurant>;
+  updateRestaurant: (id: number, name: string) => Promise<Restaurant>;
   deleteRestaurant: (id: number) => Promise<void>;
 }
 
