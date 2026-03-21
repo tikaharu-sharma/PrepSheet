@@ -13,7 +13,7 @@ import Box from "@mui/material/Box";
 import { useEffect } from "react";
 
 interface Props {
-  restaurantId?: string;
+  restaurantId?: number;
 }
 
 const data = [

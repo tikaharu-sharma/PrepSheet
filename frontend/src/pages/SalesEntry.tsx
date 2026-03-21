@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import {
   Box,
   Button,
@@ -16,7 +16,7 @@ import {
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import DeleteIcon from '@mui/icons-material/Delete'
-import { getRestaurants, type Restaurant } from './Restaurants'
+import { useRestaurant } from '../context/useRestaurant'
 
 interface Expenditure {
   id: string
@@ -43,16 +43,11 @@ const getTodayDate = () => {
 }
 
 export default function SalesEntry() {
+  const { restaurants } = useRestaurant()
   const [step, setStep] = useState<1 | 2>(1)
   const [dateValue, setDateValue] = useState(getTodayDate())
   const [restaurant, setRestaurant] = useState('')
   const [successOpen, setSuccessOpen] = useState(false)
-  const [restaurants, setRestaurants] = useState<Restaurant[]>([])
-
-  useEffect(() => {
-    const loadedRestaurants = getRestaurants()
-    setRestaurants(loadedRestaurants) // eslint-disable-line react-hooks/set-state-in-effect
-  }, [])
 
   const [sales, setSales] = useState<SalesData>({
     date: '',
