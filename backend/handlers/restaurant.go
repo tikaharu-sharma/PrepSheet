@@ -2,7 +2,9 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"strings"
 
 	"prepsheet-backend/database"
 	"prepsheet-backend/models"
@@ -66,7 +68,47 @@ func AddRestaurant(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(models.Restaurant{ID: int(id), Name: req.Name})
 }
+// UpdateRestaurant updates a restaurant name by ID.
+func UpdateRestaurant(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut {
+		http.Error(w, `{"error": "Method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
 
+	var req struct {
+		ID   int    `json:"id"`
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error": "Invalid request body"}`, http.StatusBadRequest)
+		return
+	}
+
+	if req.ID == 0 || req.Name == "" {
+		http.Error(w, `{"error": "Restaurant ID and name are required"}`, http.StatusBadRequest)
+		return
+	}
+
+	_, err := database.DB.Exec("UPDATE restaurants SET name = ? WHERE id = ?", req.Name, req.ID)
+	if err != nil {
+		lowerErr := strings.ToLower(err.Error())
+		if strings.Contains(lowerErr, "unique") || strings.Contains(lowerErr, "constraint") {
+			http.Error(w, `{"error": "Restaurant name already exists"}`, http.StatusConflict)
+			return
+		}
+		http.Error(w, fmt.Sprintf(`{"error": "Failed to update restaurant: %s"}`, strings.ReplaceAll(err.Error(), `"`, `\\"`)), http.StatusInternalServerError)
+		return
+	}
+
+	var restaurant models.Restaurant
+	if err = database.DB.QueryRow("SELECT id, name FROM restaurants WHERE id = ?", req.ID).Scan(&restaurant.ID, &restaurant.Name); err != nil {
+		http.Error(w, `{"error": "Failed to fetch updated restaurant"}`, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(restaurant)
+}
 // DeleteRestaurant removes a restaurant by ID.
 func DeleteRestaurant(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodDelete {

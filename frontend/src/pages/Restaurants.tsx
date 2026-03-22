@@ -6,6 +6,7 @@ import {
   Dialog,
   DialogContent,
   DialogTitle,
+  DialogActions,
   Stack,
   TextField,
   Typography,
@@ -18,79 +19,135 @@ import {
   TableRow,
   Paper,
   IconButton,
+  CircularProgress,
+  Alert,
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import DeleteIcon from '@mui/icons-material/Delete'
-
-export interface Restaurant {
-  id: string
-  name: string
-}
-
-const DEFAULT_RESTAURANTS: Restaurant[] = [
-  { id: '1', name: 'Indian Restaurant Mina - Munakata' },
-  { id: '2', name: 'Indian Restaurant Mina - Norimatsu' },
-  { id: '3', name: 'Indian Restaurant Mina - Tobata' },
-  { id: '4', name: 'Indian Restaurant Mina - Asakawa' },
-  { id: '5', name: 'Indian Restaurant Mina - Kurosaki' },
-  { id: '6', name: 'Indian Restaurant Mina - Shingu' },
-]
-
-const STORAGE_KEY = 'prepsheet_restaurants'
-
-export function getRestaurants(): Restaurant[] { // eslint-disable-line react-refresh/only-export-components
-  const stored = localStorage.getItem(STORAGE_KEY)
-  if (stored) {
-    try {
-      return JSON.parse(stored)
-    } catch {
-      return DEFAULT_RESTAURANTS
-    }
-  }
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_RESTAURANTS))
-  return DEFAULT_RESTAURANTS
-}
-
-export function saveRestaurants(restaurants: Restaurant[]): void { // eslint-disable-line react-refresh/only-export-components
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(restaurants))
-}
+import EditIcon from '@mui/icons-material/Edit'
+import { useRestaurant } from '../context/useRestaurant'
+import type { Restaurant } from '../lib/types'
 
 export default function Restaurants() {
-  const [restaurants, setRestaurants] = useState<Restaurant[]>([])
+  const {
+    restaurants,
+    refreshRestaurants,
+    addRestaurant,
+    updateRestaurant,
+    deleteRestaurant,
+  } = useRestaurant()
+
   const [openDialog, setOpenDialog] = useState(false)
   const [newRestaurantName, setNewRestaurantName] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [restaurantToDelete, setRestaurantToDelete] = useState<{ id: number; name: string } | null>(null)
+  const [isEditMode, setIsEditMode] = useState(false)
+  const [restaurantToEdit, setRestaurantToEdit] = useState<Restaurant | null>(null)
 
   useEffect(() => {
-    setRestaurants(getRestaurants()) // eslint-disable-line react-hooks/set-state-in-effect
-  }, [])
+    let isMounted = true
 
-  const handleAddRestaurant = () => {
+    const init = async () => {
+      try {
+        setLoading(true)
+        await refreshRestaurants()
+      } catch {
+        if (isMounted) {
+          setError('Failed to load restaurants. Please refresh or re-login.')
+        }
+      } finally {
+        if (isMounted) setLoading(false)
+      }
+    }
+
+    init()
+
+    return () => {
+      isMounted = false
+    }
+  }, [refreshRestaurants])
+
+  const handleAddRestaurant = async () => {
     if (!newRestaurantName.trim()) {
       alert('Please enter a restaurant name.')
       return
     }
 
-    const newRestaurant: Restaurant = {
-      id: Date.now().toString(),
-      name: newRestaurantName.trim(),
+    try {
+      setLoading(true)
+      if (isEditMode && restaurantToEdit) {
+        await updateRestaurant(restaurantToEdit.id, newRestaurantName.trim())
+      } else {
+        await addRestaurant(newRestaurantName.trim())
+      }
+      setNewRestaurantName('')
+      setOpenDialog(false)
+      setIsEditMode(false)
+      setRestaurantToEdit(null)
+      setError(null)
+    } catch (err: unknown) {
+      let message = `Unable to ${isEditMode ? 'update' : 'add'} restaurant. Please try again.`
+      if (err instanceof Error) {
+        message = err.message
+      } else if (typeof err === 'object' && err !== null && 'message' in err) {
+        const maybeMessage = (err as { message?: string }).message
+        if (typeof maybeMessage === 'string') {
+          message = maybeMessage
+        }
+      }
+      setError(`Unable to ${isEditMode ? 'update' : 'add'} restaurant. ${message}`)
+    } finally {
+      setLoading(false)
     }
-
-    const updated = [...restaurants, newRestaurant]
-    setRestaurants(updated)
-    saveRestaurants(updated)
-    setNewRestaurantName('')
-    setOpenDialog(false)
   }
 
-  const handleDeleteRestaurant = (id: string) => {
-    const updated = restaurants.filter((r) => r.id !== id)
-    setRestaurants(updated)
-    saveRestaurants(updated)
+  const handleDeleteRestaurant = (id: number, name: string) => {
+    setRestaurantToDelete({ id, name })
+    setDeleteConfirmOpen(true)
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!restaurantToDelete) return
+
+    try {
+      setLoading(true)
+      await deleteRestaurant(restaurantToDelete.id)
+      setError(null)
+    } catch {
+      setError('Unable to delete restaurant. Please try again.')
+    } finally {
+      setLoading(false)
+      setDeleteConfirmOpen(false)
+      setRestaurantToDelete(null)
+    }
+  }
+
+  const handleCancelDelete = () => {
+    setDeleteConfirmOpen(false)
+    setRestaurantToDelete(null)
+  }
+
+  const handleEditRestaurant = (restaurant: Restaurant) => {
+    setRestaurantToEdit(restaurant)
+    setNewRestaurantName(restaurant.name)
+    setIsEditMode(true)
+    setOpenDialog(true)
+  }
+
+  const handleAddClick = () => {
+    setIsEditMode(false)
+    setRestaurantToEdit(null)
+    setNewRestaurantName('')
+    setOpenDialog(true)
   }
 
   const handleDialogClose = () => {
     setNewRestaurantName('')
     setOpenDialog(false)
+    setIsEditMode(false)
+    setRestaurantToEdit(null)
   }
 
   return (
@@ -105,13 +162,19 @@ export default function Restaurants() {
               variant="contained"
               color="primary"
               startIcon={<AddIcon />}
-              onClick={() => setOpenDialog(true)}
+              onClick={handleAddClick}
             >
               Add Restaurant
             </Button>
           </Box>
 
-          {restaurants.length === 0 ? (
+          {loading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+              <CircularProgress />
+            </Box>
+          ) : error ? (
+            <Alert severity="error">{error}</Alert>
+          ) : restaurants.length === 0 ? (
             <Typography color="text.secondary" align="center" sx={{ py: 4 }}>
               No restaurants added yet. Click "Add Restaurant" to start.
             </Typography>
@@ -123,7 +186,7 @@ export default function Restaurants() {
                     <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>
                       Restaurant Name
                     </TableCell>
-                    <TableCell align="right" sx={{ color: 'white', fontWeight: 'bold' }}>
+                    <TableCell align="center" sx={{ color: 'white', fontWeight: 'bold' }}>
                       Actions
                     </TableCell>
                   </TableRow>
@@ -138,15 +201,25 @@ export default function Restaurants() {
                       }}
                     >
                       <TableCell>{restaurant.name}</TableCell>
-                      <TableCell align="right">
-                        <IconButton
-                          color="error"
-                          size="small"
-                          onClick={() => handleDeleteRestaurant(restaurant.id)}
-                          title="Delete restaurant"
-                        >
-                          <DeleteIcon fontSize="small" />
-                        </IconButton>
+                      <TableCell align="center">
+                        <Stack direction="row" spacing={0.5} sx={{ justifyContent: 'center' }}>
+                          <IconButton
+                            color="primary"
+                            size="small"
+                            onClick={() => handleEditRestaurant(restaurant)}
+                            title="Edit restaurant"
+                          >
+                            <EditIcon fontSize="small" />
+                          </IconButton>
+                          <IconButton
+                            color="error"
+                            size="small"
+                            onClick={() => handleDeleteRestaurant(restaurant.id, restaurant.name)}
+                            title="Delete restaurant"
+                          >
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        </Stack>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -161,10 +234,10 @@ export default function Restaurants() {
         </Stack>
       </Card>
 
-      {/* Add Restaurant Dialog */}
+      {/* Add/Edit Restaurant Dialog */}
       <Dialog open={openDialog} onClose={handleDialogClose} maxWidth="sm" fullWidth>
-        <DialogTitle>Add New Restaurant</DialogTitle>
-        <DialogContent sx={{ pt: 3 }}>
+        <DialogTitle>{isEditMode ? 'Edit Restaurant' : 'Add New Restaurant'}</DialogTitle>
+        <DialogContent sx={{ pt: 3, pb: 1 }}>
           <Stack spacing={2}>
             <TextField
               autoFocus
@@ -193,11 +266,30 @@ export default function Restaurants() {
                 fullWidth
                 onClick={handleAddRestaurant}
               >
-                Add
+                {isEditMode ? 'Update' : 'Add'}
               </Button>
             </Stack>
           </Stack>
         </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteConfirmOpen} onClose={handleCancelDelete} maxWidth="sm" fullWidth>
+        <DialogTitle>Confirm Delete</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Are you sure you want to delete the restaurant "{restaurantToDelete?.name}"?
+            This action cannot be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCancelDelete} color="inherit">
+            Cancel
+          </Button>
+          <Button onClick={handleConfirmDelete} color="error" variant="contained">
+            Delete
+          </Button>
+        </DialogActions>
       </Dialog>
     </Container>
   )

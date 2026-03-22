@@ -32,7 +32,7 @@ import {
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
-import { getRestaurants, type Restaurant } from './Restaurants';
+import type { Restaurant } from '../lib/types';
 import { useRestaurant } from "../context/useRestaurant";
 
 // ============================================================================
@@ -48,7 +48,7 @@ type Employee = {
 
 type Assignment = {
   id: string;
-  restaurantId: string;
+  restaurantId: number;
   employeeId: string;
   status: 'active' | 'inactive';
 };
@@ -73,12 +73,12 @@ const MOCK_EMPLOYEES: Employee[] = [
 ];
 
 const MOCK_ASSIGNMENTS: Assignment[] = [
-  { id: 'assign-1', restaurantId: '1', employeeId: 'emp-1', status: 'active' },
-  { id: 'assign-2', restaurantId: '2', employeeId: 'emp-2', status: 'active' },
-  { id: 'assign-3', restaurantId: '3', employeeId: 'emp-3', status: 'inactive' },
-  { id: 'assign-4', restaurantId: '4', employeeId: 'emp-4', status: 'active' },
-  { id: 'assign-5', restaurantId: '5', employeeId: 'emp-5', status: 'active' },
-  { id: 'assign-6', restaurantId: '6', employeeId: 'emp-6', status: 'inactive' },
+  { id: 'assign-1', restaurantId: 1, employeeId: 'emp-1', status: 'active' },
+  { id: 'assign-2', restaurantId: 2, employeeId: 'emp-2', status: 'active' },
+  { id: 'assign-3', restaurantId: 3, employeeId: 'emp-3', status: 'inactive' },
+  { id: 'assign-4', restaurantId: 4, employeeId: 'emp-4', status: 'active' },
+  { id: 'assign-5', restaurantId: 5, employeeId: 'emp-5', status: 'active' },
+  { id: 'assign-6', restaurantId: 6, employeeId: 'emp-6', status: 'inactive' },
 ];
 
 // ============================================================================
@@ -117,25 +117,11 @@ export const Users: React.FC = () => {
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   const [isActive, setIsActive] = useState(true);
 
-  // Load restaurants from Restaurants page and sync on changes
-  useEffect(() => {
-    const loadedRestaurants = getRestaurants();
-    setRestaurants(loadedRestaurants)
-
-    // Listen for storage changes from other tabs/windows
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'prepsheet_restaurants') {
-        const updatedRestaurants = getRestaurants();
-        setRestaurants(updatedRestaurants);
-      }
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
-  }, [setRestaurants]);
+  // Restaurant data is now managed via global context (RestaurantProvider)
 
   // Sync assignments only when restaurant data actually changes, with proper equality checks.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setAssignments((currentAssignments) => {
       if (restaurants.length === 0) return currentAssignments;
 
@@ -190,7 +176,7 @@ export const Users: React.FC = () => {
   // HELPER FUNCTIONS
   // =========================================================================
 
-  const getRestaurantName = useCallback((restaurantId: string): string => {
+  const getRestaurantName = useCallback((restaurantId: number): string => {
     return restaurants.find((r) => r.id === restaurantId)?.name || 'Unknown';
   }, [restaurants]);
 
@@ -281,7 +267,7 @@ export const Users: React.FC = () => {
         return;
       }
       // Create new restaurant
-      restaurant = { id: generateId('rest'), name: newRestaurantName.trim() };
+      restaurant = { id: Date.now(), name: newRestaurantName.trim() };
       setRestaurants([...restaurants, restaurant]);
     }
 
