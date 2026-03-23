@@ -1,6 +1,8 @@
 import type { User } from './auth';
 import type { Restaurant } from './types';
 
+export type { Restaurant };
+
 const API_BASE_URL = 'http://localhost:8080/api';
 
 export interface LoginResponse {
@@ -122,4 +124,155 @@ export async function updateRestaurant(id: number, name: string): Promise<Restau
 
   const data = await response.json();
   return data as Restaurant;
+}
+
+// ============================================================================
+// EMPLOYEE MANAGEMENT
+// ============================================================================
+
+export interface Employee {
+  id: number;
+  name: string;
+  email: string;
+  status: 'active' | 'inactive';
+  restaurants: Restaurant[];
+  created_at: string;
+}
+
+export interface CreateEmployeeRequest {
+  name: string;
+  email: string;
+  password: string;
+  status: 'active' | 'inactive';
+  restaurants: number[];
+}
+
+export async function getEmployees(): Promise<Employee[]> {
+  const response = await fetch(`${API_BASE_URL}/users`, {
+    method: 'GET',
+    headers: authHeaders(),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ message: 'Failed to fetch employees' }));
+    throw {
+      message: errorData.message || 'Failed to fetch employees',
+      status: response.status,
+    } as ApiError;
+  }
+
+  const data = await response.json();
+  return data as Employee[];
+}
+
+export async function createEmployee(req: CreateEmployeeRequest): Promise<{ id: number; message: string }> {
+  const response = await fetch(`${API_BASE_URL}/users/create`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(req),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ error: 'Failed to create employee' }));
+    throw {
+      message: errorData.message || errorData.error || 'Failed to create employee',
+      status: response.status,
+    } as ApiError;
+  }
+
+  const data = await response.json();
+  return data as { id: number; message: string };
+}
+
+export async function updateEmployeeStatus(userId: number, status: 'active' | 'inactive'): Promise<{ message: string }> {
+  const response = await fetch(`${API_BASE_URL}/users/status`, {
+    method: 'PUT',
+    headers: authHeaders(),
+    body: JSON.stringify({ user_id: userId, status }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ error: 'Failed to update employee status' }));
+    throw {
+      message: errorData.message || errorData.error || 'Failed to update employee status',
+      status: response.status,
+    } as ApiError;
+  }
+
+  const data = await response.json();
+  return data as { message: string };
+}
+
+// ============================================================================
+// ASSIGNMENTS
+// ============================================================================
+
+export interface Assignment {
+  id: number;
+  restaurant_id: number;
+  restaurant_name: string;
+  employee_id: number;
+  employee_name: string;
+  employee_email: string;
+  status: 'active' | 'inactive';
+  created_at: string;
+}
+
+export async function getAssignments(): Promise<Assignment[]> {
+  const response = await fetch(`${API_BASE_URL}/assignments`, {
+    method: 'GET',
+    headers: authHeaders(),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ message: 'Failed to fetch assignments' }));
+    throw {
+      message: errorData.message || 'Failed to fetch assignments',
+      status: response.status,
+    } as ApiError;
+  }
+
+  const data = await response.json();
+  return data as Assignment[];
+}
+
+export async function addAssignment(restaurantId: number, employeeId: number): Promise<{ id: number; message: string }> {
+  const response = await fetch(`${API_BASE_URL}/assignments/add`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({
+      restaurant_id: restaurantId,
+      employee_id: employeeId,
+      status: 'active',
+    }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ error: 'Failed to add assignment' }));
+    throw {
+      message: errorData.message || errorData.error || 'Failed to add assignment',
+      status: response.status,
+    } as ApiError;
+  }
+
+  const data = await response.json();
+  return data as { id: number; message: string };
+}
+
+export async function deleteAssignment(assignmentId: number): Promise<{ message: string }> {
+  const response = await fetch(`${API_BASE_URL}/assignments/delete?id=${assignmentId}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ error: 'Failed to delete assignment' }));
+    throw {
+      message: errorData.message || errorData.error || 'Failed to delete assignment',
+      status: response.status,
+    } as ApiError;
+  }
+
+  const data = await response.json();
+  return data as { message: string };
 }
