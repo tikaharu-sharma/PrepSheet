@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { RestaurantContext } from "./RestaurantContext";
 import type { Restaurant } from "../lib/types";
 import { fetchRestaurants, createRestaurant, updateRestaurant as updateRestaurantApi, removeRestaurant } from "../lib/api";
+import { getStoredUser, getToken } from "../lib/auth";
 
 export const RestaurantProvider = ({ children }: { children: React.ReactNode }) => {
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
@@ -9,6 +10,15 @@ export const RestaurantProvider = ({ children }: { children: React.ReactNode }) 
 
   const refreshRestaurants = useCallback(async () => {
     try {
+      const token = getToken();
+      const user = getStoredUser();
+
+      if (!token || !user) {
+        setRestaurants([]);
+        setSelectedRestaurant(null);
+        return;
+      }
+
       const data = await fetchRestaurants();
       setRestaurants(data);
       if (selectedRestaurant) {
@@ -17,6 +27,19 @@ export const RestaurantProvider = ({ children }: { children: React.ReactNode }) 
       }
     } catch (error) {
       console.error('Failed to refresh restaurants:', error);
+
+	  if (error instanceof Error) {
+		throw error;
+	  }
+
+	  if (typeof error === 'object' && error !== null && 'message' in error) {
+		const message = (error as { message?: string }).message;
+		if (typeof message === 'string' && message.trim() !== '') {
+		  throw new Error(message);
+		}
+	  }
+
+	  throw new Error('Failed to fetch restaurants');
     }
   }, [selectedRestaurant]);
 
@@ -44,9 +67,32 @@ export const RestaurantProvider = ({ children }: { children: React.ReactNode }) 
   }, [selectedRestaurant]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    refreshRestaurants();
-  }, []);
+    const syncRestaurantsWithAuth = async () => {
+      const token = getToken();
+      const user = getStoredUser();
+
+      if (!token || !user) {
+        setRestaurants([]);
+        setSelectedRestaurant(null);
+        return;
+      }
+
+      await refreshRestaurants();
+    };
+
+    const onAuthChanged = () => {
+      syncRestaurantsWithAuth().catch(() => {
+        // Keep provider stable and let page-level components show fetch failures.
+      });
+    };
+
+    window.addEventListener('auth-changed', onAuthChanged);
+    onAuthChanged();
+
+    return () => {
+      window.removeEventListener('auth-changed', onAuthChanged);
+    };
+  }, [refreshRestaurants]);
 
   return (
     <RestaurantContext.Provider

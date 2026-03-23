@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"time"
 
 	"prepsheet-backend/database"
@@ -125,30 +126,76 @@ func Login(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// GetUsers returns all users (for manager user management).
+// GetUsers returns employees managed by the logged-in manager, optionally with their assigned restaurants
 func GetUsers(w http.ResponseWriter, r *http.Request) {
-	rows, err := database.DB.Query("SELECT id, name, email, role, status, created_at FROM users ORDER BY name")
+	if r.Method != http.MethodGet {
+		http.Error(w, `{"error": "Method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Get manager ID from context
+	managerID, ok := r.Context().Value("user_id").(int)
+	if !ok {
+		http.Error(w, `{"error": "Unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+
+	// Check if requester is a manager
+	var role string
+	err := database.DB.QueryRow("SELECT role FROM users WHERE id = ?", managerID).Scan(&role)
+	if err != nil || role != "manager" {
+		http.Error(w, `{"error": "Only managers can view employees"}`, http.StatusForbidden)
+		return
+	}
+
+	// Query employees created by this manager
+	rows, err := database.DB.Query(
+		"SELECT id, name, email, status, created_at FROM users WHERE role = 'employee' AND manager_id = ? ORDER BY name",
+		managerID,
+	)
 	if err != nil {
-		http.Error(w, `{"error": "Failed to fetch users"}`, http.StatusInternalServerError)
+		http.Error(w, `{"error": "Failed to fetch employees"}`, http.StatusInternalServerError)
 		return
 	}
 	defer rows.Close()
 
-	var users []models.User
+	var employees []models.EmployeeWithRestaurants
 	for rows.Next() {
-		var u models.User
-		if err := rows.Scan(&u.ID, &u.Name, &u.Email, &u.Role, &u.Status, &u.CreatedAt); err != nil {
-			http.Error(w, `{"error": "Failed to parse user data"}`, http.StatusInternalServerError)
+		var emp models.EmployeeWithRestaurants
+		if err := rows.Scan(&emp.ID, &emp.Name, &emp.Email, &emp.Status, &emp.CreatedAt); err != nil {
+			http.Error(w, `{"error": "Failed to parse employee data"}`, http.StatusInternalServerError)
 			return
 		}
-		users = append(users, u)
+
+		// Get assigned restaurants for this employee
+		restRows, err := database.DB.Query(
+			`SELECT r.id, r.name FROM assignments a
+			 JOIN restaurants r ON a.restaurant_id = r.id
+			 WHERE a.employee_id = ? AND r.manager_id = ?
+			 ORDER BY r.name`,
+			emp.ID,
+			managerID,
+		)
+		if err == nil {
+			emp.Restaurants = []models.Restaurant{}
+			for restRows.Next() {
+				var rest models.Restaurant
+				if err := restRows.Scan(&rest.ID, &rest.Name); err == nil {
+					emp.Restaurants = append(emp.Restaurants, rest)
+				}
+			}
+			restRows.Close() // Close immediately after using, not with defer
+		}
+
+		employees = append(employees, emp)
 	}
-	if users == nil {
-		users = []models.User{}
+
+	if employees == nil {
+		employees = []models.EmployeeWithRestaurants{}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(users)
+	json.NewEncoder(w).Encode(employees)
 }
 
 // UpdateUserStatus toggles a user's active/inactive status.
@@ -158,10 +205,22 @@ func UpdateUserStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req struct {
-		UserID int    `json:"user_id"`
-		Status string `json:"status"`
+	// Get manager ID from context
+	managerID, ok := r.Context().Value("user_id").(int)
+	if !ok {
+		http.Error(w, `{"error": "Unauthorized"}`, http.StatusUnauthorized)
+		return
 	}
+
+	// Check if requester is a manager
+	var role string
+	err := database.DB.QueryRow("SELECT role FROM users WHERE id = ?", managerID).Scan(&role)
+	if err != nil || role != "manager" {
+		http.Error(w, `{"error": "Only managers can update employee status"}`, http.StatusForbidden)
+		return
+	}
+
+	var req models.UpdateEmployeeStatusRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, `{"error": "Invalid request body"}`, http.StatusBadRequest)
 		return
@@ -172,12 +231,258 @@ func UpdateUserStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err := database.DB.Exec("UPDATE users SET status = ? WHERE id = ?", req.Status, req.UserID)
+	// Verify the employee belongs to this manager
+	var empManagerID *int
+	err = database.DB.QueryRow("SELECT manager_id FROM users WHERE id = ? AND role = 'employee'", req.UserID).Scan(&empManagerID)
+	if err != nil || empManagerID == nil || *empManagerID != managerID {
+		http.Error(w, `{"error": "Employee not found or does not belong to this manager"}`, http.StatusForbidden)
+		return
+	}
+
+	_, err = database.DB.Exec("UPDATE users SET status = ? WHERE id = ?", req.Status, req.UserID)
 	if err != nil {
-		http.Error(w, `{"error": "Failed to update user status"}`, http.StatusInternalServerError)
+		http.Error(w, `{"error": "Failed to update employee status"}`, http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"message": "User status updated"})
+	json.NewEncoder(w).Encode(map[string]string{"message": "Employee status updated"})
+}
+
+// CreateEmployee creates a new employee under the logged-in manager
+func CreateEmployee(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, `{"error": "Method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Get manager ID from context
+	managerID, ok := r.Context().Value("user_id").(int)
+	if !ok {
+		http.Error(w, `{"error": "Unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+
+	// Check if requester is a manager
+	var role string
+	err := database.DB.QueryRow("SELECT role FROM users WHERE id = ?", managerID).Scan(&role)
+	if err != nil || role != "manager" {
+		http.Error(w, `{"error": "Only managers can create employees"}`, http.StatusForbidden)
+		return
+	}
+
+	var req models.CreateEmployeeRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error": "Invalid request body"}`, http.StatusBadRequest)
+		return
+	}
+
+	if req.Name == "" || req.Email == "" || req.Password == "" {
+		http.Error(w, `{"error": "Name, email, and password are required"}`, http.StatusBadRequest)
+		return
+	}
+
+	if req.Status != "active" && req.Status != "inactive" {
+		req.Status = "active"
+	}
+
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		http.Error(w, `{"error": "Failed to hash password"}`, http.StatusInternalServerError)
+		return
+	}
+
+	result, err := database.DB.Exec(
+		"INSERT INTO users (name, email, password, role, manager_id, status) VALUES (?, ?, ?, ?, ?, ?)",
+		req.Name,
+		req.Email,
+		string(hashedPassword),
+		"employee",
+		managerID,
+		req.Status,
+	)
+	if err != nil {
+		http.Error(w, `{"error": "Failed to create employee"}`, http.StatusConflict)
+		return
+	}
+
+	employeeID, _ := result.LastInsertId()
+
+	// Assign to provided restaurants if any
+	if len(req.Restaurants) > 0 {
+		for _, restaurantID := range req.Restaurants {
+			// Verify restaurant belongs to this manager
+			var restManagerID int
+			err := database.DB.QueryRow("SELECT manager_id FROM restaurants WHERE id = ?", restaurantID).Scan(&restManagerID)
+			if err != nil || restManagerID != managerID {
+				continue // Skip restaurants that don't belong to this manager
+			}
+
+			// Create assignment (ignore if duplicate)
+			database.DB.Exec(
+				"INSERT OR IGNORE INTO assignments (restaurant_id, employee_id, status) VALUES (?, ?, 'active')",
+				restaurantID,
+				employeeID,
+			)
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"message": "Employee created successfully",
+		"id":      employeeID,
+	})
+}
+
+// UpdateEmployee updates employee name/email and optionally password.
+func UpdateEmployee(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut {
+		http.Error(w, `{"error": "Method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	managerID, ok := r.Context().Value("user_id").(int)
+	if !ok {
+		http.Error(w, `{"error": "Unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+
+	var role string
+	err := database.DB.QueryRow("SELECT role FROM users WHERE id = ?", managerID).Scan(&role)
+	if err != nil || role != "manager" {
+		http.Error(w, `{"error": "Only managers can update employees"}`, http.StatusForbidden)
+		return
+	}
+
+	var req models.UpdateEmployeeRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error": "Invalid request body"}`, http.StatusBadRequest)
+		return
+	}
+
+	if req.UserID == 0 || req.Name == "" || req.Email == "" {
+		http.Error(w, `{"error": "User ID, name, and email are required"}`, http.StatusBadRequest)
+		return
+	}
+
+	var empManagerID int
+	err = database.DB.QueryRow(
+		"SELECT manager_id FROM users WHERE id = ? AND role = 'employee'",
+		req.UserID,
+	).Scan(&empManagerID)
+	if err != nil || empManagerID != managerID {
+		http.Error(w, `{"error": "Employee not found or does not belong to this manager"}`, http.StatusForbidden)
+		return
+	}
+
+	if req.Password != "" {
+		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+		if err != nil {
+			http.Error(w, `{"error": "Failed to hash password"}`, http.StatusInternalServerError)
+			return
+		}
+
+		_, err = database.DB.Exec(
+			"UPDATE users SET name = ?, email = ?, password = ? WHERE id = ? AND role = 'employee'",
+			req.Name, req.Email, string(hashedPassword), req.UserID,
+		)
+		if err != nil {
+			http.Error(w, `{"error": "Failed to update employee"}`, http.StatusConflict)
+			return
+		}
+	} else {
+		_, err = database.DB.Exec(
+			"UPDATE users SET name = ?, email = ? WHERE id = ? AND role = 'employee'",
+			req.Name, req.Email, req.UserID,
+		)
+		if err != nil {
+			http.Error(w, `{"error": "Failed to update employee"}`, http.StatusConflict)
+			return
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "Employee updated successfully"})
+}
+
+// DeleteEmployee removes an employee that belongs to the logged-in manager.
+func DeleteEmployee(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		http.Error(w, `{"error": "Method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	managerID, ok := r.Context().Value("user_id").(int)
+	if !ok {
+		http.Error(w, `{"error": "Unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+
+	var role string
+	err := database.DB.QueryRow("SELECT role FROM users WHERE id = ?", managerID).Scan(&role)
+	if err != nil || role != "manager" {
+		http.Error(w, `{"error": "Only managers can delete employees"}`, http.StatusForbidden)
+		return
+	}
+
+	idParam := r.URL.Query().Get("id")
+	id, err := strconv.Atoi(idParam)
+	if err != nil || id <= 0 {
+		http.Error(w, `{"error": "Valid employee ID is required"}`, http.StatusBadRequest)
+		return
+	}
+
+	var empManagerID int
+	err = database.DB.QueryRow(
+		"SELECT manager_id FROM users WHERE id = ? AND role = 'employee'",
+		id,
+	).Scan(&empManagerID)
+	if err != nil || empManagerID != managerID {
+		http.Error(w, `{"error": "Employee not found or does not belong to this manager"}`, http.StatusForbidden)
+		return
+	}
+
+	var salesCount int
+	err = database.DB.QueryRow("SELECT COUNT(*) FROM sales WHERE employee_id = ?", id).Scan(&salesCount)
+	if err != nil {
+		http.Error(w, `{"error": "Failed to validate employee deletion"}`, http.StatusInternalServerError)
+		return
+	}
+	if salesCount > 0 {
+		http.Error(w, `{"error": "Cannot delete employee with existing sales entries"}`, http.StatusConflict)
+		return
+	}
+
+	tx, err := database.DB.Begin()
+	if err != nil {
+		http.Error(w, `{"error": "Failed to start transaction"}`, http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec("DELETE FROM assignments WHERE employee_id = ?", id); err != nil {
+		http.Error(w, `{"error": "Failed to delete employee assignments"}`, http.StatusInternalServerError)
+		return
+	}
+
+	result, err := tx.Exec("DELETE FROM users WHERE id = ? AND role = 'employee'", id)
+	if err != nil {
+		http.Error(w, `{"error": "Failed to delete employee"}`, http.StatusInternalServerError)
+		return
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil || rowsAffected == 0 {
+		http.Error(w, `{"error": "Employee not found"}`, http.StatusNotFound)
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		http.Error(w, `{"error": "Failed to commit employee deletion"}`, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "Employee deleted successfully"})
 }

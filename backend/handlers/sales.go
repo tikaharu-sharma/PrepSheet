@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"database/sql"
 	"encoding/json"
 	"net/http"
 
@@ -29,17 +30,26 @@ func AddSale(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Look up restaurant by name, create if not found
+	// Employees may only log sales for restaurants assigned to them.
 	var restaurantID int
-	err := database.DB.QueryRow("SELECT id FROM restaurants WHERE name = ?", req.Restaurant).Scan(&restaurantID)
+	err := database.DB.QueryRow(
+		`SELECT r.id
+		 FROM restaurants r
+		 JOIN assignments a ON a.restaurant_id = r.id
+		 WHERE a.employee_id = ?
+		   AND a.status = 'active'
+		   AND r.name = ?
+		 LIMIT 1`,
+		userID,
+		req.Restaurant,
+	).Scan(&restaurantID)
+	if err == sql.ErrNoRows {
+		http.Error(w, `{"error": "You are not assigned to the selected restaurant"}`, http.StatusForbidden)
+		return
+	}
 	if err != nil {
-		result, insertErr := database.DB.Exec("INSERT INTO restaurants (name) VALUES (?)", req.Restaurant)
-		if insertErr != nil {
-			http.Error(w, `{"error": "Failed to find or create restaurant"}`, http.StatusInternalServerError)
-			return
-		}
-		id, _ := result.LastInsertId()
-		restaurantID = int(id)
+		http.Error(w, `{"error": "Failed to validate restaurant assignment"}`, http.StatusInternalServerError)
+		return
 	}
 
 	// Insert the sale
@@ -81,6 +91,7 @@ func AddSale(w http.ResponseWriter, r *http.Request) {
 
 // GetSales allows a manager to view all sales entries with optional date filters.
 func GetSales(w http.ResponseWriter, r *http.Request) {
+	managerID := r.Context().Value("user_id").(int)
 	role := r.Context().Value("role").(string)
 
 	if role != "manager" {
@@ -96,11 +107,12 @@ func GetSales(w http.ResponseWriter, r *http.Request) {
 		       s.lunch_head_count, s.lunch_sale, s.dinner_head_count, s.dinner_sale,
 		       s.credit_sale, s.reji_money, COALESCE(s.note, ''), s.created_at
 		FROM sales s
-		JOIN restaurants r ON s.restaurant_id = r.id`
+		JOIN restaurants r ON s.restaurant_id = r.id
+		WHERE r.manager_id = ?`
 
-	var args []interface{}
+	args := []interface{}{managerID}
 	if startDate != "" && endDate != "" {
-		query += " WHERE s.date BETWEEN ? AND ?"
+		query += " AND s.date BETWEEN ? AND ?"
 		args = append(args, startDate, endDate)
 	}
 	query += " ORDER BY s.date DESC"
@@ -163,6 +175,7 @@ func GetMySales(w http.ResponseWriter, r *http.Request) {
 
 // GetMonthlyReport returns aggregated monthly sales data.
 func GetMonthlyReport(w http.ResponseWriter, r *http.Request) {
+	managerID := r.Context().Value("user_id").(int)
 	role := r.Context().Value("role").(string)
 
 	if role != "manager" {
@@ -182,9 +195,11 @@ func GetMonthlyReport(w http.ResponseWriter, r *http.Request) {
 			       COALESCE(SUM(lunch_sale), 0) as total_lunch,
 			       COALESCE(SUM(dinner_sale), 0) as total_dinner,
 			       COUNT(*) as entry_count
-			FROM sales
-			WHERE strftime('%Y-%m', date) = ?`
-		err = database.DB.QueryRow(query, month, month).Scan(
+			FROM sales s
+			JOIN restaurants r ON r.id = s.restaurant_id
+			WHERE r.manager_id = ?
+			  AND strftime('%Y-%m', s.date) = ?`
+		err = database.DB.QueryRow(query, month, managerID, month).Scan(
 			&report.Month, &report.TotalSales, &report.TotalLunch, &report.TotalDinner, &report.EntryCount,
 		)
 	} else {
@@ -194,9 +209,11 @@ func GetMonthlyReport(w http.ResponseWriter, r *http.Request) {
 			       COALESCE(SUM(lunch_sale), 0) as total_lunch,
 			       COALESCE(SUM(dinner_sale), 0) as total_dinner,
 			       COUNT(*) as entry_count
-			FROM sales
-			WHERE strftime('%Y-%m', date) = strftime('%Y-%m', 'now')`
-		err = database.DB.QueryRow(query).Scan(
+			FROM sales s
+			JOIN restaurants r ON r.id = s.restaurant_id
+			WHERE r.manager_id = ?
+			  AND strftime('%Y-%m', s.date) = strftime('%Y-%m', 'now')`
+		err = database.DB.QueryRow(query, managerID).Scan(
 			&report.Month, &report.TotalSales, &report.TotalLunch, &report.TotalDinner, &report.EntryCount,
 		)
 	}
