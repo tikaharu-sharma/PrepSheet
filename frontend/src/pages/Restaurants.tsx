@@ -53,9 +53,13 @@ export default function Restaurants() {
       try {
         setLoading(true)
         await refreshRestaurants()
-      } catch {
+      } catch (err: unknown) {
         if (isMounted) {
-          setError('Failed to load restaurants. Please refresh or re-login.')
+          let message = 'Failed to load restaurants. Please refresh or re-login.'
+          if (err instanceof Error && err.message.trim() !== '') {
+            message = `Failed to load restaurants: ${err.message}`
+          }
+          setError(message)
         }
       } finally {
         if (isMounted) setLoading(false)

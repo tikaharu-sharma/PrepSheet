@@ -2,6 +2,7 @@ package database
 
 import (
 	"database/sql"
+	"fmt"
 	"log"
 
 	"golang.org/x/crypto/bcrypt"
@@ -31,7 +32,10 @@ func InitDB() {
 	}
 
 	createTables()
+	runMigrations()
 	seedAdminUser()
+	// Run migrations again so legacy rows can be backfilled with the now-seeded manager.
+	runMigrations()
 	log.Println("Database initialized successfully")
 }
 
@@ -58,13 +62,141 @@ func seedAdminUser() {
 		return
 	}
 
-	_, err = DB.Exec("INSERT INTO users (name, email, password, role, status) VALUES (?, ?, ?, ?, ?)", userName, userEmail, string(hash), userRole, "active")
+	_, err = DB.Exec("INSERT INTO users (name, email, password, role, status, manager_id) VALUES (?, ?, ?, ?, ?, ?)", userName, userEmail, string(hash), userRole, "active", nil)
 	if err != nil {
 		log.Printf("Failed to seed admin user: %v", err)
 		return
 	}
 
 	log.Println("Admin user created: admin/admin")
+}
+
+// runMigrations handles schema changes for existing databases
+func runMigrations() {
+	if err := addUsersManagerIDColumnIfMissing(); err != nil {
+		log.Printf("Migration warning (users.manager_id): %v", err)
+	}
+
+	if err := addRestaurantsManagerIDColumnIfMissing(); err != nil {
+		log.Printf("Migration warning (restaurants.manager_id): %v", err)
+	}
+
+	if err := normalizeManagerUsers(); err != nil {
+		log.Printf("Migration warning (normalize managers): %v", err)
+	}
+
+	if err := backfillRestaurantsManagerID(); err != nil {
+		log.Printf("Migration warning (backfill restaurants.manager_id): %v", err)
+	}
+
+	log.Println("Migrations completed")
+}
+
+func addUsersManagerIDColumnIfMissing() error {
+	hasColumn, err := columnExists("users", "manager_id")
+	if err != nil {
+		return err
+	}
+	if hasColumn {
+		return nil
+	}
+
+	log.Println("Adding manager_id column to users table...")
+	_, err = DB.Exec("ALTER TABLE users ADD COLUMN manager_id INTEGER REFERENCES users(id)")
+	return err
+}
+
+func addRestaurantsManagerIDColumnIfMissing() error {
+	hasColumn, err := columnExists("restaurants", "manager_id")
+	if err != nil {
+		return err
+	}
+	if hasColumn {
+		return nil
+	}
+
+	log.Println("Adding manager_id column to restaurants table...")
+	_, err = DB.Exec("ALTER TABLE restaurants ADD COLUMN manager_id INTEGER REFERENCES users(id)")
+	return err
+}
+
+func normalizeManagerUsers() error {
+	// Managers should not point to another manager by manager_id.
+	_, err := DB.Exec("UPDATE users SET manager_id = NULL WHERE role = 'manager' AND manager_id IS NOT NULL")
+	return err
+}
+
+func backfillRestaurantsManagerID() error {
+	hasColumn, err := columnExists("restaurants", "manager_id")
+	if err != nil {
+		return err
+	}
+	if !hasColumn {
+		return nil
+	}
+
+	adminID, ok, err := getDefaultManagerID()
+	if err != nil {
+		return err
+	}
+	if !ok {
+		// No manager exists yet. This pass can safely be retried after seedAdminUser.
+		return nil
+	}
+
+	result, err := DB.Exec("UPDATE restaurants SET manager_id = ? WHERE manager_id IS NULL", adminID)
+	if err != nil {
+		return err
+	}
+
+	if rowsAffected, err := result.RowsAffected(); err == nil && rowsAffected > 0 {
+		log.Printf("Backfilled manager_id for %d restaurant(s) using manager id %d", rowsAffected, adminID)
+	}
+
+	return nil
+}
+
+func getDefaultManagerID() (int, bool, error) {
+	var managerID int
+	err := DB.QueryRow("SELECT id FROM users WHERE role = 'manager' ORDER BY id LIMIT 1").Scan(&managerID)
+	if err == sql.ErrNoRows {
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, err
+	}
+	return managerID, true, nil
+}
+
+func columnExists(tableName, columnName string) (bool, error) {
+	rows, err := DB.Query(fmt.Sprintf("PRAGMA table_info(%s)", tableName))
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var cid int
+		var name string
+		var typeName string
+		var notNull int
+		var defaultValue sql.NullString
+		var pk int
+
+		if err := rows.Scan(&cid, &name, &typeName, &notNull, &defaultValue, &pk); err != nil {
+			return false, err
+		}
+
+		if name == columnName {
+			return true, nil
+		}
+	}
+
+	if err := rows.Err(); err != nil {
+		return false, err
+	}
+
+	return false, nil
 }
 
 func createTables() {
@@ -75,15 +207,19 @@ func createTables() {
 		email TEXT NOT NULL UNIQUE,
 		password TEXT NOT NULL,
 		role TEXT NOT NULL CHECK(role IN ('manager', 'employee')),
+		manager_id INTEGER,
 		status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'inactive')),
-		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		FOREIGN KEY (manager_id) REFERENCES users(id)
 	);`
 
 	restaurantsTable := `
 	CREATE TABLE IF NOT EXISTS restaurants (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		name TEXT NOT NULL UNIQUE,
-		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		manager_id INTEGER NOT NULL,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		FOREIGN KEY (manager_id) REFERENCES users(id)
 	);`
 
 	salesTable := `
@@ -120,6 +256,7 @@ func createTables() {
 		employee_id INTEGER NOT NULL,
 		status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'inactive')),
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		UNIQUE(restaurant_id, employee_id),
 		FOREIGN KEY (restaurant_id) REFERENCES restaurants(id),
 		FOREIGN KEY (employee_id) REFERENCES users(id)
 	);`
