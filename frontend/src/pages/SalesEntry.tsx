@@ -5,12 +5,10 @@ import {
   Button,
   Card,
   CircularProgress,
-  Dialog,
-  DialogContent,
-  DialogTitle,
   IconButton,
   MenuItem,
   Paper,
+  Snackbar,
   Stack,
   TextField,
   Typography,
@@ -63,7 +61,7 @@ export default function SalesEntry() {
   const [step, setStep] = useState<1 | 2>(1)
   const [dateValue, setDateValue] = useState(getTodayDate())
   const [restaurantId, setRestaurantId] = useState('')
-  const [successOpen, setSuccessOpen] = useState(false)
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
@@ -194,7 +192,7 @@ export default function SalesEntry() {
         note: sales.note.trim(),
       })
 
-      setSuccessOpen(true)
+      setSuccessMessage('Sales entry logged successfully.')
       resetForm()
     } catch (err) {
       if (err instanceof Error && err.message) {
@@ -210,57 +208,73 @@ export default function SalesEntry() {
     }
   }
 
+  const successSnackbar = (
+    <Snackbar
+      open={Boolean(successMessage)}
+      autoHideDuration={4000}
+      onClose={() => setSuccessMessage(null)}
+      anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+    >
+      <Alert onClose={() => setSuccessMessage(null)} severity="success" sx={{ width: '100%' }}>
+        {successMessage}
+      </Alert>
+    </Snackbar>
+  )
+
   if (step === 1) {
     return (
-      <Container maxWidth="sm" sx={{ py: 4 }}>
-        <Card elevation={6} sx={{ p: 4, borderRadius: 3 }}>
-          <Stack spacing={3}>
-            <Typography variant="h5" component="h1" align="center">
-              Daily Sales Entry
-            </Typography>
-            <Typography variant="body2" color="text.secondary" align="center">
-              Step 1: Select Date & Restaurant
-            </Typography>
+      <>
+        <Container maxWidth="sm" sx={{ py: 4 }}>
+          <Card elevation={6} sx={{ p: 4, borderRadius: 3 }}>
+            <Stack spacing={3}>
+              <Typography variant="h5" component="h1" align="center">
+                Daily Sales Entry
+              </Typography>
+              <Typography variant="body2" color="text.secondary" align="center">
+                Step 1: Select Date & Restaurant
+              </Typography>
 
-            {error && <Alert severity="error">{error}</Alert>}
+              {error && <Alert severity="error">{error}</Alert>}
 
-            <TextField
-              label="Date"
-              type="date"
-              value={dateValue}
-              onChange={(e) => setDateValue(e.target.value)}
-              fullWidth
-              slotProps={{ input: { placeholder: 'Select a date' } }}
-              InputLabelProps={{ shrink: true }}
-            />
+              <TextField
+                label="Date"
+                type="date"
+                value={dateValue}
+                onChange={(e) => setDateValue(e.target.value)}
+                fullWidth
+                slotProps={{ input: { placeholder: 'Select a date' } }}
+                InputLabelProps={{ shrink: true }}
+              />
 
-            <TextField
-              select
-              label="Select Restaurant"
-              value={restaurantId}
-              onChange={(e) => setRestaurantId(e.target.value)}
-              fullWidth
-            >
-              <MenuItem value="">-- Choose Restaurant --</MenuItem>
-              {restaurants.map((r) => (
-                <MenuItem key={r.id} value={String(r.id)}>
-                  {r.name}
-                </MenuItem>
-              ))}
-            </TextField>
+              <TextField
+                select
+                label="Select Restaurant"
+                value={restaurantId}
+                onChange={(e) => setRestaurantId(e.target.value)}
+                fullWidth
+              >
+                <MenuItem value="">-- Choose Restaurant --</MenuItem>
+                {restaurants.map((r) => (
+                  <MenuItem key={r.id} value={String(r.id)}>
+                    {r.name}
+                  </MenuItem>
+                ))}
+              </TextField>
 
-            <Button
-              variant="contained"
-              color="primary"
-              fullWidth
-              sx={{ py: 1.2, mt: 2 }}
-              onClick={handleDateRestaurantSubmit}
-            >
-              Next
-            </Button>
-          </Stack>
-        </Card>
-      </Container>
+              <Button
+                variant="contained"
+                color="primary"
+                fullWidth
+                sx={{ py: 1.2, mt: 2 }}
+                onClick={handleDateRestaurantSubmit}
+              >
+                Next
+              </Button>
+            </Stack>
+          </Card>
+        </Container>
+        {successSnackbar}
+      </>
     )
   }
 
@@ -431,12 +445,7 @@ export default function SalesEntry() {
         </Stack>
       </Card>
 
-      <Dialog open={successOpen} onClose={() => setSuccessOpen(false)}>
-        <DialogTitle>Success!</DialogTitle>
-        <DialogContent>
-          <Typography>Daily sales data has been successfully logged.</Typography>
-        </DialogContent>
-      </Dialog>
+      {successSnackbar}
     </Container>
   )
 }
