@@ -90,6 +90,7 @@ export default function Login() {
                     onClick={handleClickShowPassword}
                     edge="end"
                     tabIndex={-1}
+                    aria-label="toggle password visibility"
                   >
                     {showPassword ? <VisibilityOff /> : <Visibility />}
                   </IconButton>
