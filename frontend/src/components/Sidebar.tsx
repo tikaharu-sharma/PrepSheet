@@ -54,13 +54,13 @@ export default function Sidebar({ mobileOpen, handleDrawerToggle }: SidebarProps
   const location = useLocation()
 
   const { user } = useAuth();
-  const currentUserRole = user?.role || 'employee';
+  const currentUserRole = user?.role;
 
 
 
 	const handleLogout = () => {
 		clearAuthSession()
-		navigate('/login')
+    navigate('/login', { replace: true })
 	}
 
   const handleLogoClick = () => {
@@ -86,11 +86,11 @@ const adminItems: MenuItem[] = [
 
 
 const filteredMenuItems = menuItems.filter(item =>
-  item.roles.includes(currentUserRole)
+  currentUserRole ? item.roles.includes(currentUserRole) : false
 );
 
 const filteredAdminItems = adminItems.filter(item =>
-  item.roles.includes(currentUserRole)
+  currentUserRole ? item.roles.includes(currentUserRole) : false
 );
 
 const getItemStyle = (path: string) => ({
@@ -207,8 +207,8 @@ const getItemStyle = (path: string) => ({
         <Avatar />
 
         <Box sx={{ flexGrow: 1 }}>
-          <Typography variant="body2">{user?.name || 'User'}</Typography>
-          <Typography variant="caption">{user?.email || 'user@example.com'}</Typography>
+          <Typography variant="body2">{user?.name ?? ''}</Typography>
+          <Typography variant="caption">{user?.email ?? ''}</Typography>
         </Box>
 
         <IconButton onClick = {handleLogout}>

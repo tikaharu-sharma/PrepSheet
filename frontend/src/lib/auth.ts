@@ -35,11 +35,14 @@ export function getStoredUser(): User | null {
 }
 
 export function isLoggedIn(): boolean {
-  return getToken() !== null;
+  return getToken() !== null && getStoredUser() !== null;
 }
 
 export function clearAuthSession(): void {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(USER_KEY);
+  // Remove legacy/local cache keys so role-specific state cannot leak after logout.
+  localStorage.removeItem('prepsheet_restaurants');
+  localStorage.removeItem('prepsheet_selected_restaurant');
   dispatchAuthChange();
 }

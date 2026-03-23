@@ -1,15 +1,15 @@
 import React, { type ReactNode } from "react";
 import { AuthContext } from "./AuthContext";
-import { getStoredUser } from "../lib/auth";
+import { getStoredUser, isLoggedIn } from "../lib/auth";
 
 type Props = { children: ReactNode };
 
 export const AuthProvider: React.FC<Props> = ({ children }) => {
-  const [user, setUser] = React.useState(getStoredUser());
+  const [user, setUser] = React.useState(isLoggedIn() ? getStoredUser() : null);
 
   React.useEffect(() => {
     const onAuthChanged = () => {
-      setUser(getStoredUser());
+      setUser(isLoggedIn() ? getStoredUser() : null);
     };
 
     window.addEventListener('auth-changed', onAuthChanged);

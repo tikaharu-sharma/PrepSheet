@@ -38,7 +38,7 @@ export default function Navbar({ handleDrawerToggle }: NavbarProps) {
 
   const handleLogout = () => {
     clearAuthSession();
-    navigate('/login');
+    navigate('/login', { replace: true });
     handleMenuClose();
   };
 
@@ -107,10 +107,10 @@ export default function Navbar({ handleDrawerToggle }: NavbarProps) {
       >
         <Box sx={{ px: 2, py: 1 }}>
           <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>
-            {user?.name || 'User'}
+            {user?.name ?? ''}
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            {user?.email || 'user@example.com'}
+            {user?.email ?? ''}
           </Typography>
         </Box>
         <Divider />

@@ -1,9 +1,10 @@
-import React, { useMemo, useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react'
 import {
   Box,
   Button,
   Card,
   Chip,
+  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
@@ -15,348 +16,335 @@ import {
   Typography,
   Snackbar,
   Alert,
-  IconButton,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
-  Autocomplete,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
   Container,
-} from '@mui/material';
-import EditIcon from '@mui/icons-material/Edit';
-import DeleteIcon from '@mui/icons-material/Delete';
-import type { Restaurant } from '../lib/types';
-import { useRestaurant } from "../context/useRestaurant";
+  Checkbox,
+} from '@mui/material'
+import AddIcon from '@mui/icons-material/Add'
+import EditIcon from '@mui/icons-material/Edit'
+import DeleteIcon from '@mui/icons-material/Delete'
+import { getEmployees, createEmployee, updateEmployee, deleteEmployee, getAssignments, addAssignment, deleteAssignment, fetchRestaurants } from '../lib/api'
+import type { Employee, Assignment, Restaurant, CreateEmployeeRequest } from '../lib/api'
 
-// ============================================================================
-// TYPES
-// ============================================================================
-
-type Employee = {
-  id: string;
-  name: string;
-  email: string;
-  status: 'active' | 'inactive';
-};
-
-type Assignment = {
-  id: string;
-  restaurantId: number;
-  employeeId: string;
-  status: 'active' | 'inactive';
-};
 
 type SnackbarState = {
-  open: boolean;
-  message: string;
-  severity: 'success' | 'error' | 'info' | 'warning';
-};
+  open: boolean
+  message: string
+  severity: 'success' | 'error' | 'info' | 'warning'
+}
 
-// ============================================================================
-// MOCK DATA
-// ============================================================================
-
-const MOCK_EMPLOYEES: Employee[] = [
-  { id: 'emp-1', name: 'Alice Johnson', email: 'alice@example.com', status: 'active' },
-  { id: 'emp-2', name: 'Bob Smith', email: 'bob@example.com', status: 'active' },
-  { id: 'emp-3', name: 'Carol Davis', email: 'carol@example.com', status: 'inactive' },
-  { id: 'emp-4', name: 'David Wilson', email: 'david@example.com', status: 'active' },
-  { id: 'emp-5', name: 'Eva Martinez', email: 'eva@example.com', status: 'active' },
-  { id: 'emp-6', name: 'Frank Brown', email: 'frank@example.com', status: 'active' },
-];
-
-const MOCK_ASSIGNMENTS: Assignment[] = [
-  { id: 'assign-1', restaurantId: 1, employeeId: 'emp-1', status: 'active' },
-  { id: 'assign-2', restaurantId: 2, employeeId: 'emp-2', status: 'active' },
-  { id: 'assign-3', restaurantId: 3, employeeId: 'emp-3', status: 'inactive' },
-  { id: 'assign-4', restaurantId: 4, employeeId: 'emp-4', status: 'active' },
-  { id: 'assign-5', restaurantId: 5, employeeId: 'emp-5', status: 'active' },
-  { id: 'assign-6', restaurantId: 6, employeeId: 'emp-6', status: 'inactive' },
-];
-
-// ============================================================================
-// UTILS
-// ============================================================================
-
-const generateId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
-// ============================================================================
-// USERS PAGE COMPONENT
-// ============================================================================
+const getErrorMessage = (err: unknown, fallback: string): string => {
+  if (err instanceof Error && err.message.trim()) {
+    return err.message
+  }
+  if (typeof err === 'object' && err !== null && 'message' in err) {
+    const maybeMessage = (err as { message?: unknown }).message
+    if (typeof maybeMessage === 'string' && maybeMessage.trim()) {
+      return maybeMessage
+    }
+  }
+  return fallback
+}
 
 export const Users: React.FC = () => {
-  // TODO: Add manager-only access control in production
-  
   // =========================================================================
   // STATE
   // =========================================================================
 
-  const { restaurants, selectedRestaurant, setRestaurants } = useRestaurant();
-  const [employees] = useState<Employee[]>(MOCK_EMPLOYEES);
-  const [assignments, setAssignments] = useState<Assignment[]>(MOCK_ASSIGNMENTS);
+  const [employees, setEmployees] = useState<Employee[]>([])
+  const [assignments, setAssignments] = useState<Assignment[]>([])
+  const [restaurants, setRestaurants] = useState<Restaurant[]>([])
+  const [loading, setLoading] = useState(false)
+  const [snackbar, setSnackbar] = useState<SnackbarState>({ open: false, message: '', severity: 'success' })
+  const [searchTerm, setSearchTerm] = useState('')
 
-  const [searchTerm, setSearchTerm] = useState('');
-  const [snackbar, setSnackbar] = useState<SnackbarState>({ open: false, message: '', severity: 'success' });
+  // Create employee dialog
+  const [createDialogOpen, setCreateDialogOpen] = useState(false)
+  const [newEmployeeName, setNewEmployeeName] = useState('')
+  const [newEmployeeEmail, setNewEmployeeEmail] = useState('')
+  const [newEmployeePassword, setNewEmployeePassword] = useState('')
+  const [newEmployeeRestaurants, setNewEmployeeRestaurants] = useState<number[]>([])
+  const [newEmployeeStatus, setNewEmployeeStatus] = useState<'active' | 'inactive'>('active')
 
-  // Dialog states
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false);
-  const [selectedAssignmentId, setSelectedAssignmentId] = useState<string | null>(null);
+  // Assign restaurants dialog
+  const [assignDialogOpen, setAssignDialogOpen] = useState(false)
+  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null)
+  const [selectedRestaurantForAssign, setSelectedRestaurantForAssign] = useState<number | null>(null)
 
-  // Form states
-  const [selectedRestaurantForm, setSelectedRestaurantForm] = useState<Restaurant | null>(null);
-  const [isAddingNewRestaurant, setIsAddingNewRestaurant] = useState(false);
-  const [newRestaurantName, setNewRestaurantName] = useState('');
-  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
-  const [isActive, setIsActive] = useState(true);
-
-  // Restaurant data is now managed via global context (RestaurantProvider)
-
-  // Sync assignments only when restaurant data actually changes, with proper equality checks.
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setAssignments((currentAssignments) => {
-      if (restaurants.length === 0) return currentAssignments;
-
-      // Filter out assignments for deleted restaurants
-      const validAssignments = currentAssignments.filter((assignment) =>
-        restaurants.some((r) => r.id === assignment.restaurantId)
-      );
-
-      // Find new restaurants that don't have assignments yet
-      const newRestaurants = restaurants.filter(
-        (restaurant) =>
-          !currentAssignments.some((a) => a.restaurantId === restaurant.id)
-      );
-
-      // Early exit: no deletions and no new restaurants = no change needed
-      if (validAssignments.length === currentAssignments.length && newRestaurants.length === 0) {
-        return currentAssignments;
-      }
-
-      // Create assignments for new restaurants with default employees
-      const defaultEmployeeIds = MOCK_EMPLOYEES.map((emp) => emp.id);
-      const newAssignments = newRestaurants.map((restaurant, restaurantIndex) => {
-        const employeeId = defaultEmployeeIds[restaurantIndex % defaultEmployeeIds.length];
-        return {
-          id: `assign-auto-${restaurant.id}`,
-          restaurantId: restaurant.id,
-          employeeId,
-          status: 'active' as const,
-        };
-      });
-
-      const nextAssignments = [...validAssignments, ...newAssignments];
-
-      // Final check: verify the new array is actually different from current
-      // This prevents setState calls when content hasn't meaningfully changed
-      const hasRealChange = 
-        nextAssignments.length !== currentAssignments.length ||
-        nextAssignments.some((next, idx) => {
-          const current = currentAssignments[idx];
-          return !current || next.id !== current.id || next.restaurantId !== current.restaurantId || next.employeeId !== current.employeeId || next.status !== current.status;
-        });
-
-      if (!hasRealChange) {
-        return currentAssignments;
-      }
-
-      return nextAssignments;
-    });
-  }, [restaurants]);
+  // Edit employee dialog
+  const [editDialogOpen, setEditDialogOpen] = useState(false)
+  const [employeeToEdit, setEmployeeToEdit] = useState<Employee | null>(null)
+  const [editEmployeeName, setEditEmployeeName] = useState('')
+  const [editEmployeeEmail, setEditEmployeeEmail] = useState('')
+  const [editEmployeePassword, setEditEmployeePassword] = useState('')
 
   // =========================================================================
-  // HELPER FUNCTIONS
+  // HELPERS - MUST BE DEFINED BEFORE THEY'RE USED
   // =========================================================================
-
-  const getRestaurantName = useCallback((restaurantId: number): string => {
-    return restaurants.find((r) => r.id === restaurantId)?.name || 'Unknown';
-  }, [restaurants]);
-
-  const getEmployeeInfo = useCallback((employeeId: string): Employee | undefined => {
-    return employees.find((e) => e.id === employeeId);
-  }, [employees]);
 
   const showSnackbar = (message: string, severity: 'success' | 'error' | 'info' | 'warning' = 'success') => {
-    setSnackbar({ open: true, message, severity });
-  };
+    setSnackbar({ open: true, message, severity })
+  }
 
   const closeSnackbar = () => {
-    setSnackbar({ ...snackbar, open: false });
-  };
+    setSnackbar({ ...snackbar, open: false })
+  }
 
   // =========================================================================
-  // FILTERED DATA
+  // INITIALIZATION & DATA LOADING
   // =========================================================================
 
-  const filteredAssignments = useMemo(() => {
-    let result = assignments
-    if(selectedRestaurant){
-      result = result.filter(
-        (a) => a.restaurantId === selectedRestaurant.id
+  const loadData = useCallback(async () => {
+    try {
+      setLoading(true)
+      const [empsData, assignData, restData] = await Promise.all([
+        getEmployees(),
+        getAssignments(),
+        fetchRestaurants(),
+      ])
+      setEmployees(empsData)
+      setAssignments(assignData)
+      setRestaurants(restData)
+    } catch (err) {
+      const message = getErrorMessage(err, 'Failed to load data')
+      setSnackbar({ open: true, message, severity: 'error' })
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadData()
+  }, [loadData])
+
+  // =========================================================================
+  // MORE HELPERS
+  // =========================================================================
+
+  const getEmployeeRestaurants = (employeeId: number): Restaurant[] => {
+    const assignedIds = assignments
+      .filter((a) => a.employee_id === employeeId)
+      .map((a) => a.restaurant_id)
+    return restaurants.filter((r) => assignedIds.includes(r.id))
+  }
+
+  const getUnassignedRestaurants = (employeeId: number): Restaurant[] => {
+    const assignedIds = assignments
+      .filter((a) => a.employee_id === employeeId)
+      .map((a) => a.restaurant_id)
+    return restaurants.filter((r) => !assignedIds.includes(r.id))
+  }
+
+  const filteredEmployees = searchTerm
+    ? employees.filter((emp) =>
+        emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        emp.email.toLowerCase().includes(searchTerm.toLowerCase())
       )
+    : employees
+
+  // =========================================================================
+  // HANDLERS: CREATE EMPLOYEE
+  // =========================================================================
+
+  const handleCreateDialogOpen = () => {
+    setNewEmployeeName('')
+    setNewEmployeeEmail('')
+    setNewEmployeePassword('')
+    setNewEmployeeRestaurants([])
+    setNewEmployeeStatus('active')
+    setCreateDialogOpen(true)
+  }
+
+  const handleCreateDialogClose = () => {
+    setCreateDialogOpen(false)
+  }
+
+  const handleCreateEmployee = async () => {
+    if (!newEmployeeName.trim() || !newEmployeeEmail.trim() || !newEmployeePassword.trim()) {
+      showSnackbar('Name, email, and password are required', 'error')
+      return
     }
-    if (!searchTerm) return result;
 
-    const lowerSearchTerm = searchTerm.toLowerCase();
-    return result.filter((assignment) => {
-      const restaurantName = getRestaurantName(assignment.restaurantId).toLowerCase();
-      const employee = getEmployeeInfo(assignment.employeeId);
-      const employeeName = employee?.name.toLowerCase() || '';
-      const employeeEmail = employee?.email.toLowerCase() || '';
-
-      return (
-        restaurantName.includes(lowerSearchTerm) ||
-        employeeName.includes(lowerSearchTerm) ||
-        employeeEmail.includes(lowerSearchTerm)
-      );
-    });
-  }, [assignments, searchTerm, selectedRestaurant, getRestaurantName, getEmployeeInfo]);
-
-  // =========================================================================
-  // DIALOG HANDLERS
-  // =========================================================================
-
-  const handleAddClick = () => {
-    setSelectedAssignmentId(null);
-    setSelectedRestaurantForm(null);
-    setIsAddingNewRestaurant(false);
-    setNewRestaurantName('');
-    setSelectedEmployee(null);
-    setIsActive(true);
-    setIsDialogOpen(true);
-  };
-
-  const handleEditClick = (assignmentId: string) => {
-    const assignment = assignments.find((a) => a.id === assignmentId);
-    if (!assignment) return;
-
-    setSelectedAssignmentId(assignmentId);
-    setSelectedRestaurantForm(restaurants.find((r) => r.id === assignment.restaurantId) || null);
-    setIsAddingNewRestaurant(false);
-    setNewRestaurantName('');
-    setSelectedEmployee(employees.find((e) => e.id === assignment.employeeId) || null);
-    setIsActive(assignment.status === 'active');
-    setIsDialogOpen(true);
-  };
-
-  const handleDialogClose = () => {
-    setIsDialogOpen(false);
-    setSelectedAssignmentId(null);
-    setSelectedRestaurantForm(null);
-    setIsAddingNewRestaurant(false);
-    setNewRestaurantName('');
-    setSelectedEmployee(null);
-    setIsActive(true);
-  };
-
-  const handleDialogSave = () => {
-    // Validation
-    let restaurant = selectedRestaurantForm;
-
-    if (isAddingNewRestaurant) {
-      if (!newRestaurantName.trim()) {
-        showSnackbar('Please enter a restaurant name', 'error');
-        return;
+    try {
+      setLoading(true)
+      const req: CreateEmployeeRequest = {
+        name: newEmployeeName.trim(),
+        email: newEmployeeEmail.trim(),
+        password: newEmployeePassword,
+        status: newEmployeeStatus,
+        restaurants: newEmployeeRestaurants,
       }
-      // Create new restaurant
-      restaurant = { id: Date.now(), name: newRestaurantName.trim() };
-      setRestaurants([...restaurants, restaurant]);
+      await createEmployee(req)
+      showSnackbar('Employee created successfully', 'success')
+      handleCreateDialogClose()
+      await loadData()
+    } catch (err) {
+      const message = getErrorMessage(err, 'Failed to create employee')
+      showSnackbar(message, 'error')
+    } finally {
+      setLoading(false)
     }
+  }
 
-    if (!restaurant) {
-      showSnackbar('Please select or create a restaurant', 'error');
-      return;
-    }
-
-    if (!selectedEmployee) {
-      showSnackbar('Please select an employee', 'error');
-      return;
-    }
-
-    if (selectedAssignmentId) {
-      // EDIT
-      setAssignments(
-        assignments.map((a) =>
-          a.id === selectedAssignmentId
-            ? {
-                ...a,
-                restaurantId: restaurant.id,
-                employeeId: selectedEmployee.id,
-                status: isActive ? 'active' : 'inactive',
-              }
-            : a
-        )
-      );
-      showSnackbar('Assignment updated successfully', 'success');
+  const toggleRestaurantSelection = (restaurantId: number) => {
+    if (newEmployeeRestaurants.includes(restaurantId)) {
+      setNewEmployeeRestaurants(newEmployeeRestaurants.filter((id) => id !== restaurantId))
     } else {
-      // ADD
-      const newAssignment: Assignment = {
-        id: generateId('assign'),
-        restaurantId: restaurant.id,
-        employeeId: selectedEmployee.id,
-        status: isActive ? 'active' : 'inactive',
-      };
-      setAssignments([...assignments, newAssignment]);
-      showSnackbar('Assignment added successfully', 'success');
+      setNewEmployeeRestaurants([...newEmployeeRestaurants, restaurantId])
     }
-
-    handleDialogClose();
-  };
+  }
 
   // =========================================================================
-  // REMOVE HANDLERS
+  // HANDLERS: EMPLOYEE EDIT/DELETE
   // =========================================================================
 
-  const handleRemoveClick = (assignmentId: string) => {
-    setSelectedAssignmentId(assignmentId);
-    setIsConfirmDialogOpen(true);
-  };
+  const handleEditDialogOpen = (employee: Employee) => {
+    setEmployeeToEdit(employee)
+    setEditEmployeeName(employee.name)
+    setEditEmployeeEmail(employee.email)
+    setEditEmployeePassword('')
+    setEditDialogOpen(true)
+  }
 
-  const handleConfirmRemove = () => {
-    if (selectedAssignmentId) {
-      setAssignments(assignments.filter((a) => a.id !== selectedAssignmentId));
-      showSnackbar('Assignment removed successfully', 'success');
-      setIsConfirmDialogOpen(false);
-      setSelectedAssignmentId(null);
+  const handleEditDialogClose = () => {
+    setEditDialogOpen(false)
+    setEmployeeToEdit(null)
+    setEditEmployeeName('')
+    setEditEmployeeEmail('')
+    setEditEmployeePassword('')
+  }
+
+  const handleUpdateEmployee = async () => {
+    if (!employeeToEdit) return
+
+    if (!editEmployeeName.trim() || !editEmployeeEmail.trim()) {
+      showSnackbar('Name and email are required', 'error')
+      return
     }
-  };
 
-  const handleCancelRemove = () => {
-    setIsConfirmDialogOpen(false);
-    setSelectedAssignmentId(null);
-  };
+    try {
+      setLoading(true)
+      await updateEmployee({
+        user_id: employeeToEdit.id,
+        name: editEmployeeName.trim(),
+        email: editEmployeeEmail.trim(),
+        ...(editEmployeePassword.trim() ? { password: editEmployeePassword } : {}),
+      })
+      showSnackbar('Employee updated successfully', 'success')
+      handleEditDialogClose()
+      await loadData()
+    } catch (err) {
+      const message = getErrorMessage(err, 'Failed to update employee')
+      showSnackbar(message, 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleDeleteEmployee = async (employee: Employee) => {
+    if (!window.confirm(`Are you sure you want to delete ${employee.name}? This cannot be undone.`)) {
+      return
+    }
+
+    try {
+      setLoading(true)
+      await deleteEmployee(employee.id)
+      showSnackbar('Employee deleted successfully', 'success')
+      await loadData()
+    } catch (err) {
+      const message = getErrorMessage(err, 'Failed to delete employee')
+      showSnackbar(message, 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // =========================================================================
+  // HANDLERS: ASSIGNMENTS
+  // =========================================================================
+
+  const handleAssignDialogOpen = (employee: Employee) => {
+    setSelectedEmployee(employee)
+    setSelectedRestaurantForAssign(null)
+    setAssignDialogOpen(true)
+  }
+
+  const handleAssignDialogClose = () => {
+    setAssignDialogOpen(false)
+    setSelectedEmployee(null)
+    setSelectedRestaurantForAssign(null)
+  }
+
+  const handleAddAssignment = async () => {
+    if (!selectedEmployee || !selectedRestaurantForAssign) {
+      showSnackbar('Please select a restaurant', 'error')
+      return
+    }
+
+    try {
+      setLoading(true)
+      await addAssignment(selectedRestaurantForAssign, selectedEmployee.id)
+      showSnackbar('Employee assigned to restaurant', 'success')
+      handleAssignDialogClose()
+      await loadData()
+    } catch (err) {
+      const message = getErrorMessage(err, 'Failed to assign employee')
+      showSnackbar(message, 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleRemoveAssignment = async (assignmentId: number) => {
+    if (!window.confirm('Are you sure you want to remove this assignment?')) {
+      return
+    }
+
+    try {
+      setLoading(true)
+      await deleteAssignment(assignmentId)
+      showSnackbar('Assignment removed', 'success')
+      await loadData()
+    } catch (err) {
+      const message = getErrorMessage(err, 'Failed to remove assignment')
+      showSnackbar(message, 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   // =========================================================================
   // RENDER
   // =========================================================================
+
+  if (loading && employees.length === 0) {
+    return (
+      <Container maxWidth="lg" sx={{ py: 4 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+          <CircularProgress />
+        </Box>
+      </Container>
+    )
+  }
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
       {/* Header */}
       <Box sx={{ mb: 4 }}>
         <Typography variant="h4" component="h1" sx={{ fontWeight: 600, mb: 1 }}>
-          Users / Assignments
+          Employee Management
         </Typography>
         <Typography variant="body2" color="textSecondary">
-          Manage restaurant-to-employee assignments for data entry duties
+          Manage employees and their restaurant assignments
         </Typography>
       </Box>
 
       {/* Action Bar */}
       <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap', alignItems: 'center' }}>
-        <Button variant="contained" color="primary" onClick={handleAddClick}>
-          + Add Assignment
+        <Button variant="contained" color="primary" startIcon={<AddIcon />} onClick={handleCreateDialogOpen}>
+          Create Employee
         </Button>
         <TextField
-          placeholder="Search by restaurant or employee name..."
+          placeholder="Search employees by name or email..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           size="small"
@@ -364,159 +352,228 @@ export const Users: React.FC = () => {
         />
       </Box>
 
-      {/* Table */}
-      <Card>
-        <TableContainer component={Paper} sx={{ overflowX: 'auto' }}>
-          <Table>
-            <TableHead sx={{ backgroundColor: '#f5f5f5' }}>
-              <TableRow>
-                <TableCell sx={{ fontWeight: 600 }}>Restaurant</TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>Assigned Employee</TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>Actions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {filteredAssignments.length > 0 ? (
-                filteredAssignments.map((assignment) => {
-                  const restaurant = restaurants.find((r) => r.id === assignment.restaurantId);
-                  const employee = employees.find((e) => e.id === assignment.employeeId);
+      {/* Employees List */}
+      <Stack spacing={2}>
+        {filteredEmployees.length === 0 ? (
+          <Card sx={{ p: 3 }}>
+            <Typography align="center" color="textSecondary">
+              {searchTerm ? 'No employees match your search' : 'No employees yet. Click "Create Employee" to add one.'}
+            </Typography>
+          </Card>
+        ) : (
+          filteredEmployees.map((employee) => {
+            const empRestaurants = getEmployeeRestaurants(employee.id)
+            const empAssignments = assignments.filter((a) => a.employee_id === employee.id)
 
-                  return (
-                    <TableRow key={assignment.id} hover>
-                      <TableCell>{restaurant?.name || 'Unknown'}</TableCell>
-                      <TableCell>
-                        <Box>
-                          <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                            {employee?.name}
-                          </Typography>
-                          <Typography variant="caption" color="textSecondary">
-                            {employee?.email}
-                          </Typography>
-                        </Box>
-                      </TableCell>
-                      <TableCell>
-                        <Chip
-                          label={assignment.status === 'active' ? 'Active' : 'Inactive'}
-                          color={assignment.status === 'active' ? 'success' : 'default'}
-                          variant="outlined"
-                          size="small"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Stack direction="row" spacing={0.5}>
-                          <IconButton
-                            size="small"
-                            color="primary"
-                            onClick={() => handleEditClick(assignment.id)}
-                            title="Edit assignment"
-                          >
-                            <EditIcon fontSize="small" />
-                          </IconButton>
-                          <IconButton
-                            size="small"
-                            color="error"
-                            onClick={() => handleRemoveClick(assignment.id)}
-                            title="Remove assignment"
-                          >
-                            <DeleteIcon fontSize="small" />
-                          </IconButton>
-                        </Stack>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })
-              ) : (
-                <TableRow>
-                  <TableCell colSpan={4} align="center" sx={{ py: 4 }}>
-                    <Typography variant="body2" color="textSecondary">
-                      {searchTerm ? 'No assignments match your search' : 'No assignments yet'}
+            return (
+              <Card key={employee.id} sx={{ p: 3 }}>
+                {/* Employee Header */}
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+                  <Box>
+                    <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                      {employee.name}
                     </Typography>
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      </Card>
+                    <Typography variant="body2" color="textSecondary">
+                      {employee.email}
+                    </Typography>
+                  </Box>
+                  <Stack direction="row" spacing={1}>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      startIcon={<EditIcon />}
+                      onClick={() => handleEditDialogOpen(employee)}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      color="error"
+                      startIcon={<DeleteIcon />}
+                      onClick={() => handleDeleteEmployee(employee)}
+                    >
+                      Delete
+                    </Button>
+                  </Stack>
+                </Box>
 
-      {/* ADD/EDIT DIALOG */}
-      <Dialog open={isDialogOpen} onClose={handleDialogClose} maxWidth="sm" fullWidth>
-        <DialogTitle>{selectedAssignmentId ? 'Edit Assignment' : 'Add Assignment'}</DialogTitle>
-        <DialogContent sx={{ pt: 2 }}>
-          <Stack spacing={3}>
-            {/* Restaurant Selection */}
-            <FormControl fullWidth>
-              <InputLabel>Restaurant</InputLabel>
-              <Select
-                value={isAddingNewRestaurant ? 'NEW' : selectedRestaurantForm?.id || ''}
-                onChange={(e) => {
-                  if (e.target.value === 'NEW') {
-                    setIsAddingNewRestaurant(true);
-                    setSelectedRestaurantForm(null);
-                  } else {
-                    setIsAddingNewRestaurant(false);
-                    const restaurant = restaurants.find((r) => r.id === e.target.value);
-                    setSelectedRestaurantForm(restaurant || null);
-                  }
-                }}
-                label="Restaurant"
-              >
-                {restaurants.map((restaurant) => (
-                  <MenuItem key={restaurant.id} value={restaurant.id}>
-                    {restaurant.name}
-                  </MenuItem>
-                ))}
-                <MenuItem value="NEW">+ Add new restaurant</MenuItem>
-              </Select>
-            </FormControl>
+                {/* Assigned Restaurants */}
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
+                    Assigned Restaurants ({empRestaurants.length})
+                  </Typography>
+                  {empRestaurants.length === 0 ? (
+                    <Typography variant="body2" color="textSecondary">
+                      Not assigned to any restaurants
+                    </Typography>
+                  ) : (
+                    <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                      {empRestaurants.map((rest) => {
+                        const assignment = empAssignments.find((a) => a.restaurant_id === rest.id)
+                        return (
+                          <Chip
+                            key={rest.id}
+                            label={rest.name}
+                            onDelete={() => assignment && handleRemoveAssignment(assignment.id)}
+                            color="primary"
+                            variant="outlined"
+                          />
+                        )
+                      })}
+                    </Stack>
+                  )}
+                </Box>
 
-            {/* New Restaurant Name Input */}
-            {isAddingNewRestaurant && (
-              <TextField
-                label="New Restaurant Name"
-                placeholder="Enter restaurant name"
-                value={newRestaurantName}
-                onChange={(e) => setNewRestaurantName(e.target.value)}
-                fullWidth
-              />
-            )}
+                {/* Assign More Restaurants Button */}
+                {getUnassignedRestaurants(employee.id).length > 0 && (
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    onClick={() => handleAssignDialogOpen(employee)}
+                  >
+                    Assign Restaurant
+                  </Button>
+                )}
+              </Card>
+            )
+          })
+        )}
+      </Stack>
 
-            {/* Employee Selection with Autocomplete */}
-            <Autocomplete
-              options={employees}
-              getOptionLabel={(option) => `${option.name} (${option.email})`}
-              value={selectedEmployee}
-              onChange={(_, newValue) => setSelectedEmployee(newValue)}
-              renderInput={(params) => <TextField {...params} label="Employee" />}
-              isOptionEqualToValue={(option, value) => option.id === value?.id}
+      {/* CREATE EMPLOYEE DIALOG */}
+      <Dialog open={createDialogOpen} onClose={handleCreateDialogClose} maxWidth="sm" fullWidth>
+        <DialogTitle>Create New Employee</DialogTitle>
+        <DialogContent sx={{ pt: 3 }}>
+          <Stack spacing={2}>
+            <TextField
+              label="Name"
+              fullWidth
+              value={newEmployeeName}
+              onChange={(e) => setNewEmployeeName(e.target.value)}
+              placeholder="Employee full name"
+            />
+            <TextField
+              label="Email / Username"
+              fullWidth
+              type="email"
+              value={newEmployeeEmail}
+              onChange={(e) => setNewEmployeeEmail(e.target.value)}
+              placeholder="employee@example.com or username"
+            />
+            <TextField
+              label="Password"
+              fullWidth
+              type="password"
+              value={newEmployeePassword}
+              onChange={(e) => setNewEmployeePassword(e.target.value)}
+              placeholder="Set initial password"
             />
 
-            {/* Status Toggle */}
             <FormControlLabel
-              control={<Switch checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />}
-              label={isActive ? 'Active' : 'Inactive'}
+              control={
+                <Switch
+                  checked={newEmployeeStatus === 'active'}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                    setNewEmployeeStatus(e.target.checked ? 'active' : 'inactive')
+                  }
+                />
+              }
+              label={newEmployeeStatus === 'active' ? 'Active' : 'Inactive'}
             />
+
+            <Box>
+              <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
+                Initial Restaurant Assignments (optional)
+              </Typography>
+              <Stack spacing={1}>
+                {restaurants.map((rest) => (
+                  <FormControlLabel
+                    key={rest.id}
+                    control={
+                      <Checkbox
+                        checked={newEmployeeRestaurants.includes(rest.id)}
+                        onChange={() => toggleRestaurantSelection(rest.id)}
+                      />
+                    }
+                    label={rest.name}
+                  />
+                ))}
+              </Stack>
+            </Box>
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleDialogClose}>Cancel</Button>
-          <Button onClick={handleDialogSave} variant="contained" color="primary">
-            {selectedAssignmentId ? 'Update' : 'Add'}
+          <Button onClick={handleCreateDialogClose}>Cancel</Button>
+          <Button onClick={handleCreateEmployee} variant="contained" color="primary">
+            Create
           </Button>
         </DialogActions>
       </Dialog>
 
-      {/* CONFIRM REMOVE DIALOG */}
-      <Dialog open={isConfirmDialogOpen} onClose={handleCancelRemove} maxWidth="xs" fullWidth>
-        <DialogTitle>Remove Assignment</DialogTitle>
-        <DialogContent>
-          <Typography>Are you sure you want to remove this assignment? This action cannot be undone.</Typography>
+      {/* ASSIGN RESTAURANT DIALOG */}
+      <Dialog open={assignDialogOpen} onClose={handleAssignDialogClose} maxWidth="sm" fullWidth>
+        <DialogTitle>Assign Restaurant to {selectedEmployee?.name}</DialogTitle>
+        <DialogContent sx={{ pt: 2 }}>
+          {selectedEmployee && getUnassignedRestaurants(selectedEmployee.id).length === 0 ? (
+            <Typography color="textSecondary">All restaurants are already assigned to this employee.</Typography>
+          ) : (
+            <Stack spacing={1}>
+              {selectedEmployee &&
+                getUnassignedRestaurants(selectedEmployee.id).map((rest) => (
+                  <Button
+                    key={rest.id}
+                    fullWidth
+                    variant={selectedRestaurantForAssign === rest.id ? 'contained' : 'outlined'}
+                    onClick={() => setSelectedRestaurantForAssign(rest.id)}
+                    sx={{ justifyContent: 'flex-start' }}
+                  >
+                    {rest.name}
+                  </Button>
+                ))}
+            </Stack>
+          )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCancelRemove}>Cancel</Button>
-          <Button onClick={handleConfirmRemove} variant="contained" color="error">
-            Remove
+          <Button onClick={handleAssignDialogClose}>Cancel</Button>
+          <Button onClick={handleAddAssignment} variant="contained" color="primary" disabled={!selectedRestaurantForAssign}>
+            Assign
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* EDIT EMPLOYEE DIALOG */}
+      <Dialog open={editDialogOpen} onClose={handleEditDialogClose} maxWidth="sm" fullWidth>
+        <DialogTitle>Edit Employee</DialogTitle>
+        <DialogContent sx={{ pt: 3 }}>
+          <Stack spacing={2}>
+            <TextField
+              label="Name"
+              fullWidth
+              value={editEmployeeName}
+              onChange={(e) => setEditEmployeeName(e.target.value)}
+            />
+            <TextField
+              label="Email / Username"
+              fullWidth
+              type="email"
+              value={editEmployeeEmail}
+              onChange={(e) => setEditEmployeeEmail(e.target.value)}
+            />
+            <TextField
+              label="New Password (optional)"
+              fullWidth
+              type="password"
+              value={editEmployeePassword}
+              onChange={(e) => setEditEmployeePassword(e.target.value)}
+              placeholder="Leave blank to keep current password"
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleEditDialogClose}>Cancel</Button>
+          <Button onClick={handleUpdateEmployee} variant="contained" color="primary">
+            Save Changes
           </Button>
         </DialogActions>
       </Dialog>
@@ -526,14 +583,14 @@ export const Users: React.FC = () => {
         open={snackbar.open}
         autoHideDuration={4000}
         onClose={closeSnackbar}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
       >
-        <Alert onClose={closeSnackbar} severity={snackbar.severity} sx={{ width: '100%' }}>
+        <Alert onClose={closeSnackbar} severity={snackbar.severity}>
           {snackbar.message}
         </Alert>
       </Snackbar>
     </Container>
-  );
-};
+  )
+}
 
-export default Users;
+export default Users
