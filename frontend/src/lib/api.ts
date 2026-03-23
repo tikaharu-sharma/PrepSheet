@@ -147,6 +147,13 @@ export interface CreateEmployeeRequest {
   restaurants: number[];
 }
 
+export interface UpdateEmployeeRequest {
+  user_id: number;
+  name: string;
+  email: string;
+  password?: string;
+}
+
 export async function getEmployees(): Promise<Employee[]> {
   const response = await fetch(`${API_BASE_URL}/users`, {
     method: 'GET',
@@ -195,6 +202,43 @@ export async function updateEmployeeStatus(userId: number, status: 'active' | 'i
     const errorData = await response.json().catch(() => ({ error: 'Failed to update employee status' }));
     throw {
       message: errorData.message || errorData.error || 'Failed to update employee status',
+      status: response.status,
+    } as ApiError;
+  }
+
+  const data = await response.json();
+  return data as { message: string };
+}
+
+export async function updateEmployee(req: UpdateEmployeeRequest): Promise<{ message: string }> {
+  const response = await fetch(`${API_BASE_URL}/users/update`, {
+    method: 'PUT',
+    headers: authHeaders(),
+    body: JSON.stringify(req),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ error: 'Failed to update employee' }));
+    throw {
+      message: errorData.message || errorData.error || 'Failed to update employee',
+      status: response.status,
+    } as ApiError;
+  }
+
+  const data = await response.json();
+  return data as { message: string };
+}
+
+export async function deleteEmployee(userId: number): Promise<{ message: string }> {
+  const response = await fetch(`${API_BASE_URL}/users/delete?id=${userId}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ error: 'Failed to delete employee' }));
+    throw {
+      message: errorData.message || errorData.error || 'Failed to delete employee',
       status: response.status,
     } as ApiError;
   }

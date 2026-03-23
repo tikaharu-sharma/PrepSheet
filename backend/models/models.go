@@ -32,17 +32,25 @@ type SignupRequest struct {
 
 // CreateEmployeeRequest is the payload for creating a new employee under a manager
 type CreateEmployeeRequest struct {
-	Name      string `json:"name"`
-	Email     string `json:"email"`
-	Password  string `json:"password"`
-	Status    string `json:"status"`
-	Restaurants []int `json:"restaurants"`
+	Name        string `json:"name"`
+	Email       string `json:"email"`
+	Password    string `json:"password"`
+	Status      string `json:"status"`
+	Restaurants []int  `json:"restaurants"`
 }
 
 // UpdateEmployeeStatusRequest is the payload for updating employee status
 type UpdateEmployeeStatusRequest struct {
 	UserID int    `json:"user_id"`
 	Status string `json:"status"`
+}
+
+// UpdateEmployeeRequest is the payload for updating employee profile details.
+type UpdateEmployeeRequest struct {
+	UserID   int    `json:"user_id"`
+	Name     string `json:"name"`
+	Email    string `json:"email"`
+	Password string `json:"password,omitempty"`
 }
 
 // LoginRequest is the payload for user login.

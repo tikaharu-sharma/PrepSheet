@@ -20,7 +20,9 @@ import {
   Checkbox,
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
-import { getEmployees, createEmployee, updateEmployeeStatus, getAssignments, addAssignment, deleteAssignment, fetchRestaurants } from '../lib/api'
+import EditIcon from '@mui/icons-material/Edit'
+import DeleteIcon from '@mui/icons-material/Delete'
+import { getEmployees, createEmployee, updateEmployee, deleteEmployee, getAssignments, addAssignment, deleteAssignment, fetchRestaurants } from '../lib/api'
 import type { Employee, Assignment, Restaurant, CreateEmployeeRequest } from '../lib/api'
 
 
@@ -28,6 +30,19 @@ type SnackbarState = {
   open: boolean
   message: string
   severity: 'success' | 'error' | 'info' | 'warning'
+}
+
+const getErrorMessage = (err: unknown, fallback: string): string => {
+  if (err instanceof Error && err.message.trim()) {
+    return err.message
+  }
+  if (typeof err === 'object' && err !== null && 'message' in err) {
+    const maybeMessage = (err as { message?: unknown }).message
+    if (typeof maybeMessage === 'string' && maybeMessage.trim()) {
+      return maybeMessage
+    }
+  }
+  return fallback
 }
 
 export const Users: React.FC = () => {
@@ -54,6 +69,13 @@ export const Users: React.FC = () => {
   const [assignDialogOpen, setAssignDialogOpen] = useState(false)
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null)
   const [selectedRestaurantForAssign, setSelectedRestaurantForAssign] = useState<number | null>(null)
+
+  // Edit employee dialog
+  const [editDialogOpen, setEditDialogOpen] = useState(false)
+  const [employeeToEdit, setEmployeeToEdit] = useState<Employee | null>(null)
+  const [editEmployeeName, setEditEmployeeName] = useState('')
+  const [editEmployeeEmail, setEditEmployeeEmail] = useState('')
+  const [editEmployeePassword, setEditEmployeePassword] = useState('')
 
   // =========================================================================
   // HELPERS - MUST BE DEFINED BEFORE THEY'RE USED
@@ -83,7 +105,7 @@ export const Users: React.FC = () => {
       setAssignments(assignData)
       setRestaurants(restData)
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to load data'
+      const message = getErrorMessage(err, 'Failed to load data')
       setSnackbar({ open: true, message, severity: 'error' })
     } finally {
       setLoading(false)
@@ -156,7 +178,7 @@ export const Users: React.FC = () => {
       handleCreateDialogClose()
       await loadData()
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to create employee'
+      const message = getErrorMessage(err, 'Failed to create employee')
       showSnackbar(message, 'error')
     } finally {
       setLoading(false)
@@ -172,18 +194,64 @@ export const Users: React.FC = () => {
   }
 
   // =========================================================================
-  // HANDLERS: EMPLOYEE STATUS
+  // HANDLERS: EMPLOYEE EDIT/DELETE
   // =========================================================================
 
-  const handleToggleEmployeeStatus = async (employeeId: number, currentStatus: string) => {
+  const handleEditDialogOpen = (employee: Employee) => {
+    setEmployeeToEdit(employee)
+    setEditEmployeeName(employee.name)
+    setEditEmployeeEmail(employee.email)
+    setEditEmployeePassword('')
+    setEditDialogOpen(true)
+  }
+
+  const handleEditDialogClose = () => {
+    setEditDialogOpen(false)
+    setEmployeeToEdit(null)
+    setEditEmployeeName('')
+    setEditEmployeeEmail('')
+    setEditEmployeePassword('')
+  }
+
+  const handleUpdateEmployee = async () => {
+    if (!employeeToEdit) return
+
+    if (!editEmployeeName.trim() || !editEmployeeEmail.trim()) {
+      showSnackbar('Name and email are required', 'error')
+      return
+    }
+
     try {
       setLoading(true)
-      const newStatus = currentStatus === 'active' ? 'inactive' : 'active'
-      await updateEmployeeStatus(employeeId, newStatus as 'active' | 'inactive')
-      showSnackbar('Employee status updated', 'success')
+      await updateEmployee({
+        user_id: employeeToEdit.id,
+        name: editEmployeeName.trim(),
+        email: editEmployeeEmail.trim(),
+        ...(editEmployeePassword.trim() ? { password: editEmployeePassword } : {}),
+      })
+      showSnackbar('Employee updated successfully', 'success')
+      handleEditDialogClose()
       await loadData()
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to update employee status'
+      const message = getErrorMessage(err, 'Failed to update employee')
+      showSnackbar(message, 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleDeleteEmployee = async (employee: Employee) => {
+    if (!window.confirm(`Are you sure you want to delete ${employee.name}? This cannot be undone.`)) {
+      return
+    }
+
+    try {
+      setLoading(true)
+      await deleteEmployee(employee.id)
+      showSnackbar('Employee deleted successfully', 'success')
+      await loadData()
+    } catch (err) {
+      const message = getErrorMessage(err, 'Failed to delete employee')
       showSnackbar(message, 'error')
     } finally {
       setLoading(false)
@@ -219,7 +287,7 @@ export const Users: React.FC = () => {
       handleAssignDialogClose()
       await loadData()
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to assign employee'
+      const message = getErrorMessage(err, 'Failed to assign employee')
       showSnackbar(message, 'error')
     } finally {
       setLoading(false)
@@ -237,7 +305,7 @@ export const Users: React.FC = () => {
       showSnackbar('Assignment removed', 'success')
       await loadData()
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to remove assignment'
+      const message = getErrorMessage(err, 'Failed to remove assignment')
       showSnackbar(message, 'error')
     } finally {
       setLoading(false)
@@ -309,17 +377,25 @@ export const Users: React.FC = () => {
                       {employee.email}
                     </Typography>
                   </Box>
-                  <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                    <FormControlLabel
-                      control={
-                        <Switch
-                          checked={employee.status === 'active'}
-                          onChange={() => handleToggleEmployeeStatus(employee.id, employee.status)}
-                        />
-                      }
-                      label={employee.status === 'active' ? 'Active' : 'Inactive'}
-                    />
-                  </Box>
+                  <Stack direction="row" spacing={1}>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      startIcon={<EditIcon />}
+                      onClick={() => handleEditDialogOpen(employee)}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      color="error"
+                      startIcon={<DeleteIcon />}
+                      onClick={() => handleDeleteEmployee(employee)}
+                    >
+                      Delete
+                    </Button>
+                  </Stack>
                 </Box>
 
                 {/* Assigned Restaurants */}
@@ -378,12 +454,12 @@ export const Users: React.FC = () => {
               placeholder="Employee full name"
             />
             <TextField
-              label="Email"
+              label="Email / Username"
               fullWidth
               type="email"
               value={newEmployeeEmail}
               onChange={(e) => setNewEmployeeEmail(e.target.value)}
-              placeholder="employee@example.com"
+              placeholder="employee@example.com or username"
             />
             <TextField
               label="Password"
@@ -398,7 +474,9 @@ export const Users: React.FC = () => {
               control={
                 <Switch
                   checked={newEmployeeStatus === 'active'}
-                  onChange={(e) => setNewEmployeeStatus(e.target.checked ? 'active' : 'inactive')}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                    setNewEmployeeStatus(e.target.checked ? 'active' : 'inactive')
+                  }
                 />
               }
               label={newEmployeeStatus === 'active' ? 'Active' : 'Inactive'}
@@ -460,6 +538,42 @@ export const Users: React.FC = () => {
           <Button onClick={handleAssignDialogClose}>Cancel</Button>
           <Button onClick={handleAddAssignment} variant="contained" color="primary" disabled={!selectedRestaurantForAssign}>
             Assign
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* EDIT EMPLOYEE DIALOG */}
+      <Dialog open={editDialogOpen} onClose={handleEditDialogClose} maxWidth="sm" fullWidth>
+        <DialogTitle>Edit Employee</DialogTitle>
+        <DialogContent sx={{ pt: 3 }}>
+          <Stack spacing={2}>
+            <TextField
+              label="Name"
+              fullWidth
+              value={editEmployeeName}
+              onChange={(e) => setEditEmployeeName(e.target.value)}
+            />
+            <TextField
+              label="Email / Username"
+              fullWidth
+              type="email"
+              value={editEmployeeEmail}
+              onChange={(e) => setEditEmployeeEmail(e.target.value)}
+            />
+            <TextField
+              label="New Password (optional)"
+              fullWidth
+              type="password"
+              value={editEmployeePassword}
+              onChange={(e) => setEditEmployeePassword(e.target.value)}
+              placeholder="Leave blank to keep current password"
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleEditDialogClose}>Cancel</Button>
+          <Button onClick={handleUpdateEmployee} variant="contained" color="primary">
+            Save Changes
           </Button>
         </DialogActions>
       </Dialog>

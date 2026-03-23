@@ -37,6 +37,8 @@ func main() {
 	// ─── User management routes ─────────────────────────────────────────
 	mux.HandleFunc("/api/users", middleware.AuthMiddleware(handlers.GetUsers))
 	mux.HandleFunc("/api/users/create", middleware.AuthMiddleware(handlers.CreateEmployee))
+	mux.HandleFunc("/api/users/update", middleware.AuthMiddleware(handlers.UpdateEmployee))
+	mux.HandleFunc("/api/users/delete", middleware.AuthMiddleware(handlers.DeleteEmployee))
 	mux.HandleFunc("/api/users/status", middleware.AuthMiddleware(handlers.UpdateUserStatus))
 
 	// ─── Assignment routes ──────────────────────────────────────────────

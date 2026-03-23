@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"time"
 
 	"prepsheet-backend/database"
@@ -332,4 +333,156 @@ func CreateEmployee(w http.ResponseWriter, r *http.Request) {
 		"message": "Employee created successfully",
 		"id":      employeeID,
 	})
+}
+
+// UpdateEmployee updates employee name/email and optionally password.
+func UpdateEmployee(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut {
+		http.Error(w, `{"error": "Method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	managerID, ok := r.Context().Value("user_id").(int)
+	if !ok {
+		http.Error(w, `{"error": "Unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+
+	var role string
+	err := database.DB.QueryRow("SELECT role FROM users WHERE id = ?", managerID).Scan(&role)
+	if err != nil || role != "manager" {
+		http.Error(w, `{"error": "Only managers can update employees"}`, http.StatusForbidden)
+		return
+	}
+
+	var req models.UpdateEmployeeRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error": "Invalid request body"}`, http.StatusBadRequest)
+		return
+	}
+
+	if req.UserID == 0 || req.Name == "" || req.Email == "" {
+		http.Error(w, `{"error": "User ID, name, and email are required"}`, http.StatusBadRequest)
+		return
+	}
+
+	var empManagerID int
+	err = database.DB.QueryRow(
+		"SELECT manager_id FROM users WHERE id = ? AND role = 'employee'",
+		req.UserID,
+	).Scan(&empManagerID)
+	if err != nil || empManagerID != managerID {
+		http.Error(w, `{"error": "Employee not found or does not belong to this manager"}`, http.StatusForbidden)
+		return
+	}
+
+	if req.Password != "" {
+		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+		if err != nil {
+			http.Error(w, `{"error": "Failed to hash password"}`, http.StatusInternalServerError)
+			return
+		}
+
+		_, err = database.DB.Exec(
+			"UPDATE users SET name = ?, email = ?, password = ? WHERE id = ? AND role = 'employee'",
+			req.Name, req.Email, string(hashedPassword), req.UserID,
+		)
+		if err != nil {
+			http.Error(w, `{"error": "Failed to update employee"}`, http.StatusConflict)
+			return
+		}
+	} else {
+		_, err = database.DB.Exec(
+			"UPDATE users SET name = ?, email = ? WHERE id = ? AND role = 'employee'",
+			req.Name, req.Email, req.UserID,
+		)
+		if err != nil {
+			http.Error(w, `{"error": "Failed to update employee"}`, http.StatusConflict)
+			return
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "Employee updated successfully"})
+}
+
+// DeleteEmployee removes an employee that belongs to the logged-in manager.
+func DeleteEmployee(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		http.Error(w, `{"error": "Method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	managerID, ok := r.Context().Value("user_id").(int)
+	if !ok {
+		http.Error(w, `{"error": "Unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+
+	var role string
+	err := database.DB.QueryRow("SELECT role FROM users WHERE id = ?", managerID).Scan(&role)
+	if err != nil || role != "manager" {
+		http.Error(w, `{"error": "Only managers can delete employees"}`, http.StatusForbidden)
+		return
+	}
+
+	idParam := r.URL.Query().Get("id")
+	id, err := strconv.Atoi(idParam)
+	if err != nil || id <= 0 {
+		http.Error(w, `{"error": "Valid employee ID is required"}`, http.StatusBadRequest)
+		return
+	}
+
+	var empManagerID int
+	err = database.DB.QueryRow(
+		"SELECT manager_id FROM users WHERE id = ? AND role = 'employee'",
+		id,
+	).Scan(&empManagerID)
+	if err != nil || empManagerID != managerID {
+		http.Error(w, `{"error": "Employee not found or does not belong to this manager"}`, http.StatusForbidden)
+		return
+	}
+
+	var salesCount int
+	err = database.DB.QueryRow("SELECT COUNT(*) FROM sales WHERE employee_id = ?", id).Scan(&salesCount)
+	if err != nil {
+		http.Error(w, `{"error": "Failed to validate employee deletion"}`, http.StatusInternalServerError)
+		return
+	}
+	if salesCount > 0 {
+		http.Error(w, `{"error": "Cannot delete employee with existing sales entries"}`, http.StatusConflict)
+		return
+	}
+
+	tx, err := database.DB.Begin()
+	if err != nil {
+		http.Error(w, `{"error": "Failed to start transaction"}`, http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec("DELETE FROM assignments WHERE employee_id = ?", id); err != nil {
+		http.Error(w, `{"error": "Failed to delete employee assignments"}`, http.StatusInternalServerError)
+		return
+	}
+
+	result, err := tx.Exec("DELETE FROM users WHERE id = ? AND role = 'employee'", id)
+	if err != nil {
+		http.Error(w, `{"error": "Failed to delete employee"}`, http.StatusInternalServerError)
+		return
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil || rowsAffected == 0 {
+		http.Error(w, `{"error": "Employee not found"}`, http.StatusNotFound)
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		http.Error(w, `{"error": "Failed to commit employee deletion"}`, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "Employee deleted successfully"})
 }
