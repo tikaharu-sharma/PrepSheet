@@ -12,8 +12,11 @@ dist/
 
 # SQLite database files
 *.db
-*.db-wal
 *.db-shm
+*.db-wal
+*.before_restore_*
+*.before_reseed_*
+*.bak_seed_*
 
 # OS files
 .DS_Store
