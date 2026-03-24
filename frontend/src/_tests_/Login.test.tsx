@@ -29,7 +29,7 @@ describe('Login Page', () => {
     )
 
     expect(screen.getByLabelText(/email or username/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/password/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^password$/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /sign in/i })).toBeInTheDocument()
   })
 
@@ -56,7 +56,7 @@ describe('Login Page', () => {
     )
 
     fireEvent.change(screen.getByLabelText(/email or username/i), { target: { value: 'test@example.com' } })
-    fireEvent.change(screen.getByLabelText(/password/i), { target: { value: 'password' } })
+    fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: 'password' } })
     fireEvent.click(screen.getByRole('button', { name: /sign in/i }))
 
     // Wait for next render (sign in button still exists)
@@ -77,7 +77,7 @@ describe('Login Page', () => {
     )
 
     fireEvent.change(screen.getByLabelText(/email or username/i), { target: { value: 'test@example.com' } })
-    fireEvent.change(screen.getByLabelText(/password/i), { target: { value: 'wrong' } })
+    fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: 'wrong' } })
     fireEvent.click(screen.getByRole('button', { name: /sign in/i }))
 
     expect(await screen.findByText(/invalid email or password/i)).toBeInTheDocument()
