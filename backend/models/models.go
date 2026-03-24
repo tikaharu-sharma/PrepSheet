@@ -104,6 +104,7 @@ type Sale struct {
 // SaleRequest is the payload for adding a new sale entry.
 type SaleRequest struct {
 	Date            string             `json:"date"`
+	RestaurantID    int                `json:"restaurant_id,omitempty"`
 	Restaurant      string             `json:"restaurant"`
 	LunchHeadCount  int                `json:"lunch_head_count"`
 	LunchSale       float64            `json:"lunch_sale"`

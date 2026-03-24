@@ -320,3 +320,115 @@ export async function deleteAssignment(assignmentId: number): Promise<{ message:
   const data = await response.json();
   return data as { message: string };
 }
+
+// ============================================================================
+// SALES & REPORTS
+// ============================================================================
+
+export interface SaleExpenditureInput {
+  title: string;
+  amount: number;
+}
+
+export interface SalePayload {
+  date: string;
+  restaurant_id: number;
+  restaurant: string;
+  lunch_head_count: number;
+  lunch_sale: number;
+  dinner_head_count: number;
+  dinner_sale: number;
+  credit_sale: number;
+  reji_money: number;
+  expenditures: SaleExpenditureInput[];
+  note: string;
+}
+
+export interface SaleRecord {
+  id: number;
+  employee_id: number;
+  restaurant_id: number;
+  restaurant_name: string;
+  date: string;
+  lunch_head_count: number;
+  lunch_sale: number;
+  dinner_head_count: number;
+  dinner_sale: number;
+  credit_sale: number;
+  reji_money: number;
+  expenditures: SaleExpenditureInput[];
+  note: string;
+  created_at: string;
+}
+
+export interface MonthlyReport {
+  month: string;
+  total_sales: number;
+  total_lunch: number;
+  total_dinner: number;
+  entry_count: number;
+}
+
+export async function submitSale(payload: SalePayload): Promise<{ message: string; sale_id: number }> {
+  const response = await fetch(`${API_BASE_URL}/sales`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ error: 'Failed to submit sale' }));
+    throw {
+      message: errorData.message || errorData.error || 'Failed to submit sale',
+      status: response.status,
+    } as ApiError;
+  }
+
+  const data = await response.json();
+  return data as { message: string; sale_id: number };
+}
+
+export async function fetchSales(params?: { startDate?: string; endDate?: string; restaurantId?: number }): Promise<SaleRecord[]> {
+  const query = new URLSearchParams();
+  if (params?.startDate) query.set('start_date', params.startDate);
+  if (params?.endDate) query.set('end_date', params.endDate);
+  if (params?.restaurantId) query.set('restaurant_id', String(params.restaurantId));
+
+  const response = await fetch(`${API_BASE_URL}/sales/all${query.toString() ? `?${query.toString()}` : ''}`, {
+    method: 'GET',
+    headers: authHeaders(),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ message: 'Failed to fetch sales' }));
+    throw {
+      message: errorData.message || 'Failed to fetch sales',
+      status: response.status,
+    } as ApiError;
+  }
+
+  const data = await response.json();
+  return data as SaleRecord[];
+}
+
+export async function fetchMonthlyReport(month?: string, restaurantId?: number): Promise<MonthlyReport> {
+  const query = new URLSearchParams();
+  if (month) query.set('month', month);
+  if (restaurantId) query.set('restaurant_id', String(restaurantId));
+  const queryString = query.toString();
+  const response = await fetch(`${API_BASE_URL}/reports/monthly${queryString ? `?${queryString}` : ''}`, {
+    method: 'GET',
+    headers: authHeaders(),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ message: 'Failed to fetch monthly report' }));
+    throw {
+      message: errorData.message || 'Failed to fetch monthly report',
+      status: response.status,
+    } as ApiError;
+  }
+
+  const data = await response.json();
+  return data as MonthlyReport;
+}

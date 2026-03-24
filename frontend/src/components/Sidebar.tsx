@@ -18,7 +18,6 @@ import PeopleIcon from "@mui/icons-material/People";
 import BarChartIcon from "@mui/icons-material/BarChart";
 import ReceiptIcon from "@mui/icons-material/Receipt";
 import StoreIcon from "@mui/icons-material/Store";
-import PersonAddIcon from "@mui/icons-material/PersonAdd";
 import InsightsIcon from "@mui/icons-material/Insights";
 import SettingsIcon from "@mui/icons-material/Settings";
 import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
@@ -73,9 +72,8 @@ const menuItems: MenuItem[] = [
   { text: "Dashboard", icon: <HomeIcon />, path: "/home", roles: ["manager", "employee"] },
   { text: "Sales Entry", icon: <ReceiptIcon />, path: "/sales-entry", roles: ["manager", "employee"] },
   { text: "Users", icon: <PeopleIcon />, path: "/users", roles: ["manager"] },
-  { text: "Reports", icon: <BarChartIcon />, path: "/reports", roles: ["manager"] },
+  { text: "Reports", icon: <BarChartIcon />, path: "/reports", roles: ["manager", "employee"] },
   { text: "Restaurants", icon: <StoreIcon />, path: "/restaurants", roles: ["manager"] },
-  { text: "Register", icon: <PersonAddIcon />, path: "/register", roles: ["manager"] },
   { text: "Data Visualization", icon: <InsightsIcon />, path: "/visualization", roles: ["manager"] }
 ];
 

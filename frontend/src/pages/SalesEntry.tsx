@@ -1,30 +1,31 @@
 import { useState } from 'react'
 import {
+  Alert,
   Box,
   Button,
   Card,
-  Dialog,
-  DialogContent,
-  DialogTitle,
+  CircularProgress,
+  IconButton,
+  MenuItem,
+  Paper,
+  Snackbar,
   Stack,
   TextField,
   Typography,
   Container,
-  Paper,
-  IconButton,
-  MenuItem,
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import DeleteIcon from '@mui/icons-material/Delete'
 import { useRestaurant } from '../context/useRestaurant'
+import { submitSale } from '../lib/api'
 
-interface Expenditure {
+interface ExpenditureDraft {
   id: string
   title: string
   amount: string
 }
 
-interface SalesData {
+interface SalesDraft {
   date: string
   restaurant: string
   lunchHeadCount: string
@@ -33,7 +34,7 @@ interface SalesData {
   dinnerSale: string
   creditSale: string
   rejiMoney: string
-  expenditures: Expenditure[]
+  expenditures: ExpenditureDraft[]
   note: string
 }
 
@@ -42,37 +43,53 @@ const getTodayDate = () => {
   return today.toISOString().split('T')[0]
 }
 
+const createInitialSalesDraft = (): SalesDraft => ({
+  date: '',
+  restaurant: '',
+  lunchHeadCount: '',
+  lunchSale: '',
+  dinnerHeadCount: '',
+  dinnerSale: '',
+  creditSale: '',
+  rejiMoney: '',
+  expenditures: [],
+  note: '',
+})
+
 export default function SalesEntry() {
   const { restaurants } = useRestaurant()
   const [step, setStep] = useState<1 | 2>(1)
   const [dateValue, setDateValue] = useState(getTodayDate())
-  const [restaurant, setRestaurant] = useState('')
-  const [successOpen, setSuccessOpen] = useState(false)
+  const [restaurantId, setRestaurantId] = useState('')
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
 
-  const [sales, setSales] = useState<SalesData>({
-    date: '',
-    restaurant: '',
-    lunchHeadCount: '',
-    lunchSale: '',
-    dinnerHeadCount: '',
-    dinnerSale: '',
-    creditSale: '',
-    rejiMoney: '',
-    expenditures: [],
-    note: '',
-  })
+  const [sales, setSales] = useState<SalesDraft>(createInitialSalesDraft())
 
   const handleDateRestaurantSubmit = () => {
-    if (!restaurant) {
-      alert('Please select a restaurant.')
+    if (!dateValue) {
+      setError('Date is required.')
       return
     }
-    setSales((prev) => ({ ...prev, date: dateValue, restaurant }))
+    if (!restaurantId) {
+      setError('Please select a restaurant.')
+      return
+    }
+
+    const selectedRestaurant = restaurants.find((item) => String(item.id) === restaurantId)
+    if (!selectedRestaurant) {
+      setError('Selected restaurant could not be found.')
+      return
+    }
+
+    setError(null)
+    setSales((prev) => ({ ...prev, date: dateValue, restaurant: selectedRestaurant.name }))
     setStep(2)
   }
 
   const handleSalesChange = (
-    field: keyof Omit<SalesData, 'expenditures'>,
+    field: keyof Omit<SalesDraft, 'expenditures'>,
     value: string
   ) => {
     setSales((prev) => ({ ...prev, [field]: value }))
@@ -108,81 +125,156 @@ export default function SalesEntry() {
     }))
   }
 
-  const handleSubmit = () => {
-    // Mock submit - later will call API
-    console.log('Sales data submitted:', sales)
-    setSuccessOpen(true)
+  const validateSalesEntry = (): string | null => {
+    const requiredFields: Array<[string, string]> = [
+      ['Lunch persons', sales.lunchHeadCount],
+      ['Lunch sale', sales.lunchSale],
+      ['Dinner persons', sales.dinnerHeadCount],
+      ['Dinner sale', sales.dinnerSale],
+      ['Credit sale', sales.creditSale],
+      ['Reji money', sales.rejiMoney],
+    ]
 
-    // Reset form after success
-    setTimeout(() => {
-      setSuccessOpen(false)
-      setSales({
-        date: '',
-        restaurant: '',
-        lunchHeadCount: '',
-        lunchSale: '',
-        dinnerHeadCount: '',
-        dinnerSale: '',
-        creditSale: '',
-        rejiMoney: '',
-        expenditures: [],
-        note: '',
-      })
-      setStep(1)
-      setDateValue('')
-      setRestaurant('')
-    }, 2000)
+    for (const [label, value] of requiredFields) {
+      if (value.trim() === '') {
+        return `${label} is required.`
+      }
+    }
+
+    for (const exp of sales.expenditures) {
+      const hasTitle = exp.title.trim() !== ''
+      const hasAmount = exp.amount.trim() !== ''
+      if (hasTitle !== hasAmount) {
+        return 'Each expenditure must include both title and amount.'
+      }
+      if (hasAmount && Number(exp.amount) < 0) {
+        return 'Expenditure amounts cannot be negative.'
+      }
+    }
+
+    return null
   }
+
+  const resetForm = () => {
+    setSales(createInitialSalesDraft())
+    setStep(1)
+    setDateValue(getTodayDate())
+    setRestaurantId('')
+  }
+
+  const handleSubmit = async () => {
+    const validationError = validateSalesEntry()
+    if (validationError) {
+      setError(validationError)
+      return
+    }
+
+    try {
+      setSubmitting(true)
+      setError(null)
+
+      await submitSale({
+        date: sales.date,
+        restaurant_id: Number(restaurantId),
+        restaurant: sales.restaurant,
+        lunch_head_count: Number(sales.lunchHeadCount),
+        lunch_sale: Number(sales.lunchSale),
+        dinner_head_count: Number(sales.dinnerHeadCount),
+        dinner_sale: Number(sales.dinnerSale),
+        credit_sale: Number(sales.creditSale),
+        reji_money: Number(sales.rejiMoney),
+        expenditures: sales.expenditures
+          .filter((exp) => exp.title.trim() !== '' && exp.amount.trim() !== '')
+          .map((exp) => ({
+            title: exp.title.trim(),
+            amount: Number(exp.amount),
+          })),
+        note: sales.note.trim(),
+      })
+
+      setSuccessMessage('Sales entry logged successfully.')
+      resetForm()
+    } catch (err) {
+      if (err instanceof Error && err.message) {
+        setError(err.message)
+      } else if (typeof err === 'object' && err !== null && 'message' in err) {
+        const message = (err as { message?: string }).message
+        setError(message || 'Failed to submit sales entry.')
+      } else {
+        setError('Failed to submit sales entry.')
+      }
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const successSnackbar = (
+    <Snackbar
+      open={Boolean(successMessage)}
+      autoHideDuration={4000}
+      onClose={() => setSuccessMessage(null)}
+      anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+    >
+      <Alert onClose={() => setSuccessMessage(null)} severity="success" sx={{ width: '100%' }}>
+        {successMessage}
+      </Alert>
+    </Snackbar>
+  )
 
   if (step === 1) {
     return (
-      <Container maxWidth="sm" sx={{ py: 4 }}>
-        <Card elevation={6} sx={{ p: 4, borderRadius: 3 }}>
-          <Stack spacing={3}>
-            <Typography variant="h5" component="h1" align="center">
-              Daily Sales Entry
-            </Typography>
-            <Typography variant="body2" color="text.secondary" align="center">
-              Step 1: Select Date & Restaurant
-            </Typography>
+      <>
+        <Container maxWidth="sm" sx={{ py: 4 }}>
+          <Card elevation={6} sx={{ p: 4, borderRadius: 3 }}>
+            <Stack spacing={3}>
+              <Typography variant="h5" component="h1" align="center">
+                Daily Sales Entry
+              </Typography>
+              <Typography variant="body2" color="text.secondary" align="center">
+                Step 1: Select Date & Restaurant
+              </Typography>
 
-            <TextField
-              label="Date"
-              type="date"
-              value={dateValue}
-              onChange={(e) => setDateValue(e.target.value)}
-              fullWidth
-              slotProps={{ input: { placeholder: 'Select a date' } }}
-              InputLabelProps={{ shrink: true }}
-            />
+              {error && <Alert severity="error">{error}</Alert>}
 
-            <TextField
-              select
-              label="Select Restaurant"
-              value={restaurant}
-              onChange={(e) => setRestaurant(e.target.value)}
-              fullWidth
-            >
-              <MenuItem value="">-- Choose Restaurant --</MenuItem>
-              {restaurants.map((r) => (
-                <MenuItem key={r.id} value={r.name}>
-                  {r.name}
-                </MenuItem>
-              ))}
-            </TextField>
+              <TextField
+                label="Date"
+                type="date"
+                value={dateValue}
+                onChange={(e) => setDateValue(e.target.value)}
+                fullWidth
+                slotProps={{ input: { placeholder: 'Select a date' } }}
+                InputLabelProps={{ shrink: true }}
+              />
 
-            <Button
-              variant="contained"
-              color="primary"
-              fullWidth
-              sx={{ py: 1.2, mt: 2 }}
-              onClick={handleDateRestaurantSubmit}
-            >
-              Next
-            </Button>
-          </Stack>
-        </Card>
-      </Container>
+              <TextField
+                select
+                label="Select Restaurant"
+                value={restaurantId}
+                onChange={(e) => setRestaurantId(e.target.value)}
+                fullWidth
+              >
+                <MenuItem value="">-- Choose Restaurant --</MenuItem>
+                {restaurants.map((r) => (
+                  <MenuItem key={r.id} value={String(r.id)}>
+                    {r.name}
+                  </MenuItem>
+                ))}
+              </TextField>
+
+              <Button
+                variant="contained"
+                color="primary"
+                fullWidth
+                sx={{ py: 1.2, mt: 2 }}
+                onClick={handleDateRestaurantSubmit}
+              >
+                Next
+              </Button>
+            </Stack>
+          </Card>
+        </Container>
+        {successSnackbar}
+      </>
     )
   }
 
@@ -199,6 +291,8 @@ export default function SalesEntry() {
             </Typography>
           </Box>
 
+          {error && <Alert severity="error">{error}</Alert>}
+
           <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mt: 2 }}>
             Lunch Sales
           </Typography>
@@ -209,6 +303,7 @@ export default function SalesEntry() {
               value={sales.lunchHeadCount}
               onChange={(e) => handleSalesChange('lunchHeadCount', e.target.value)}
               fullWidth
+              required
             />
             <TextField
               label="Lunch Sale"
@@ -217,6 +312,7 @@ export default function SalesEntry() {
               value={sales.lunchSale}
               onChange={(e) => handleSalesChange('lunchSale', e.target.value)}
               fullWidth
+              required
             />
           </Stack>
 
@@ -230,6 +326,7 @@ export default function SalesEntry() {
               value={sales.dinnerHeadCount}
               onChange={(e) => handleSalesChange('dinnerHeadCount', e.target.value)}
               fullWidth
+              required
             />
             <TextField
               label="Dinner Sale"
@@ -238,6 +335,7 @@ export default function SalesEntry() {
               value={sales.dinnerSale}
               onChange={(e) => handleSalesChange('dinnerSale', e.target.value)}
               fullWidth
+              required
             />
           </Stack>
 
@@ -252,14 +350,16 @@ export default function SalesEntry() {
               value={sales.creditSale}
               onChange={(e) => handleSalesChange('creditSale', e.target.value)}
               fullWidth
+              required
             />
             <TextField
-              label="Reji Money (Opening Balance)"
+              label="Reji Money"
               type="number"
               inputProps={{ step: '0.01' }}
               value={sales.rejiMoney}
               onChange={(e) => handleSalesChange('rejiMoney', e.target.value)}
               fullWidth
+              required
             />
           </Stack>
 
@@ -288,7 +388,7 @@ export default function SalesEntry() {
                       handleExpenditureChange(exp.id, 'amount', e.target.value)
                     }
                     size="small"
-                    sx={{ minWidth: 120 }}
+                    sx={{ minWidth: 140 }}
                   />
                   <IconButton
                     color="error"
@@ -326,6 +426,7 @@ export default function SalesEntry() {
               fullWidth
               sx={{ py: 1.2 }}
               onClick={() => setStep(1)}
+              disabled={submitting}
             >
               Back
             </Button>
@@ -335,19 +436,16 @@ export default function SalesEntry() {
               fullWidth
               sx={{ py: 1.2 }}
               onClick={handleSubmit}
+              disabled={submitting}
+              startIcon={submitting ? <CircularProgress size={18} color="inherit" /> : undefined}
             >
-              Submit
+              {submitting ? 'Submitting...' : 'Submit'}
             </Button>
           </Stack>
         </Stack>
       </Card>
 
-      <Dialog open={successOpen} onClose={() => setSuccessOpen(false)}>
-        <DialogTitle>Success!</DialogTitle>
-        <DialogContent>
-          <Typography>Daily sales data has been successfully logged.</Typography>
-        </DialogContent>
-      </Dialog>
+      {successSnackbar}
     </Container>
   )
 }

@@ -14,13 +14,38 @@ interface DashboardCardProps {
   title: string;
   subtitle: string;
   value: string;
-  trend: "up" | "down"; // Only "up" or "down" allowed
+  trend: "up" | "down";
   trendPercent: string;
   previousText: string;
   previousValue: string;
   detailsLink: string;
   icon: ReactNode;
 }
+
+export interface DashboardSummaryData {
+  totalSales: number;
+  lunchSales: number;
+  dinnerSales: number;
+  previousTotalSales: number;
+  previousLunchSales: number;
+  previousDinnerSales: number;
+}
+
+const formatCurrency = (value: number) =>
+  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value);
+
+const formatTrend = (current: number, previous: number) => {
+  if (previous === 0) {
+    return { trend: "up" as const, percent: current === 0 ? "0%" : "+100%" };
+  }
+
+  const change = ((current - previous) / previous) * 100;
+  const rounded = `${change >= 0 ? "+" : ""}${Math.round(change)}%`;
+  return {
+    trend: change >= 0 ? ("up" as const) : ("down" as const),
+    percent: rounded,
+  };
+};
 
 const DashboardCard: React.FC<DashboardCardProps> = ({
   title,
@@ -53,9 +78,6 @@ const DashboardCard: React.FC<DashboardCardProps> = ({
         <Typography variant="h4" sx={{ fontWeight: 700, color: "#023337" }}>
           {value}
         </Typography>
-        <Typography variant="body2" sx={{ color: "#6a717f" }}>
-          Sales
-        </Typography>
         <Box sx={{ display: "flex", alignItems: "center", color: trendColor, ml: 1 }}>
           {trend === "up" ? <ArrowUpwardIcon fontSize="small" /> : <ArrowDownwardIcon fontSize="small" />}
           <Typography variant="body2" sx={{ ml: 0.3 }}>
@@ -83,40 +105,46 @@ const DashboardCard: React.FC<DashboardCardProps> = ({
   );
 };
 
-// ---- Dashboard grid ----
+interface Props {
+  summary: DashboardSummaryData;
+}
 
-export default function DashboardSummaryCards() {
+export default function DashboardSummaryCards({ summary }: Props) {
+  const totalTrend = formatTrend(summary.totalSales, summary.previousTotalSales);
+  const lunchTrend = formatTrend(summary.lunchSales, summary.previousLunchSales);
+  const dinnerTrend = formatTrend(summary.dinnerSales, summary.previousDinnerSales);
+
   const cardsData: DashboardCardProps[] = [
     {
       title: "Total Sales",
       subtitle: "Last 7 days",
-      value: "$3,500",
-      trend: "up",
-      trendPercent: "+12%",
+      value: formatCurrency(summary.totalSales),
+      trend: totalTrend.trend,
+      trendPercent: totalTrend.percent,
       previousText: "Previous 7 days",
-      previousValue: "$3,200",
+      previousValue: formatCurrency(summary.previousTotalSales),
       detailsLink: "/reports",
       icon: <AttachMoneyIcon />,
     },
     {
       title: "Lunch Sales",
       subtitle: "Last 7 days",
-      value: "$2,100",
-      trend: "down",
-      trendPercent: "-5%",
+      value: formatCurrency(summary.lunchSales),
+      trend: lunchTrend.trend,
+      trendPercent: lunchTrend.percent,
       previousText: "Previous 7 days",
-      previousValue: "$2,200",
+      previousValue: formatCurrency(summary.previousLunchSales),
       detailsLink: "/reports",
       icon: <LunchDiningIcon />,
     },
     {
       title: "Dinner Sales",
       subtitle: "Last 7 days",
-      value: "$1,400",
-      trend: "up",
-      trendPercent: "+8%",
+      value: formatCurrency(summary.dinnerSales),
+      trend: dinnerTrend.trend,
+      trendPercent: dinnerTrend.percent,
       previousText: "Previous 7 days",
-      previousValue: "$1,300",
+      previousValue: formatCurrency(summary.previousDinnerSales),
       detailsLink: "/reports",
       icon: <DinnerDiningIcon />,
     },
@@ -125,7 +153,7 @@ export default function DashboardSummaryCards() {
   return (
     <Grid container spacing={3}>
       {cardsData.map((card) => (
-        <Grid key={card.title} size = {{ xs:12, sm:6, md:4}}>
+        <Grid key={card.title} size={{ xs: 12, sm: 6, md: 4 }}>
           <DashboardCard {...card} />
         </Grid>
       ))}
