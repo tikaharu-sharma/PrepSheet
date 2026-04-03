@@ -53,6 +53,17 @@ type UpdateEmployeeRequest struct {
 	Password string `json:"password,omitempty"`
 }
 
+// VerifyPasswordRequest is the payload for checking the current password.
+type VerifyPasswordRequest struct {
+	CurrentPassword string `json:"current_password"`
+}
+
+// ChangePasswordRequest is the payload for updating the authenticated user's password.
+type ChangePasswordRequest struct {
+	CurrentPassword string `json:"current_password"`
+	NewPassword     string `json:"new_password"`
+}
+
 // LoginRequest is the payload for user login.
 type LoginRequest struct {
 	Email    string `json:"email"`

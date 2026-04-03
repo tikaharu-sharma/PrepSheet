@@ -342,6 +342,72 @@ func AddAssignment(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// UpdateAssignment updates an assignment's status for a manager-owned restaurant.
+func UpdateAssignment(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut {
+		http.Error(w, `{"error": "Method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	managerID, ok := r.Context().Value("user_id").(int)
+	if !ok {
+		http.Error(w, `{"error": "Unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+
+	var role string
+	err := database.DB.QueryRow("SELECT role FROM users WHERE id = ?", managerID).Scan(&role)
+	if err != nil || role != "manager" {
+		http.Error(w, `{"error": "Only managers can update assignments"}`, http.StatusForbidden)
+		return
+	}
+
+	var req struct {
+		ID           int    `json:"id"`
+		RestaurantID int    `json:"restaurant_id"`
+		EmployeeID   int    `json:"employee_id"`
+		Status       string `json:"status"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error": "Invalid request body"}`, http.StatusBadRequest)
+		return
+	}
+
+	if req.ID == 0 || req.RestaurantID == 0 || req.EmployeeID == 0 {
+		http.Error(w, `{"error": "Assignment ID, restaurant ID, and employee ID are required"}`, http.StatusBadRequest)
+		return
+	}
+
+	if req.Status != "active" && req.Status != "inactive" {
+		http.Error(w, `{"error": "Status must be 'active' or 'inactive'"}`, http.StatusBadRequest)
+		return
+	}
+
+	var ownerID int
+	err = database.DB.QueryRow(
+		`SELECT r.manager_id
+		 FROM assignments a
+		 JOIN restaurants r ON a.restaurant_id = r.id
+		 WHERE a.id = ? AND a.restaurant_id = ? AND a.employee_id = ?`,
+		req.ID,
+		req.RestaurantID,
+		req.EmployeeID,
+	).Scan(&ownerID)
+	if err != nil || ownerID != managerID {
+		http.Error(w, `{"error": "Assignment not found or does not belong to this manager"}`, http.StatusForbidden)
+		return
+	}
+
+	_, err = database.DB.Exec("UPDATE assignments SET status = ? WHERE id = ?", req.Status, req.ID)
+	if err != nil {
+		http.Error(w, `{"error": "Failed to update assignment"}`, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "Assignment updated"})
+}
+
 // DeleteAssignment removes an assignment by ID (manager-scoped).
 func DeleteAssignment(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodDelete {

@@ -40,10 +40,13 @@ func main() {
 	mux.HandleFunc("/api/users/update", middleware.AuthMiddleware(handlers.UpdateEmployee))
 	mux.HandleFunc("/api/users/delete", middleware.AuthMiddleware(handlers.DeleteEmployee))
 	mux.HandleFunc("/api/users/status", middleware.AuthMiddleware(handlers.UpdateUserStatus))
+	mux.HandleFunc("/api/users/verify-password", middleware.AuthMiddleware(handlers.VerifyPassword))
+	mux.HandleFunc("/api/users/change-password", middleware.AuthMiddleware(handlers.ChangePassword))
 
 	// ─── Assignment routes ──────────────────────────────────────────────
 	mux.HandleFunc("/api/assignments", middleware.AuthMiddleware(handlers.GetAssignments))
 	mux.HandleFunc("/api/assignments/add", middleware.AuthMiddleware(handlers.AddAssignment))
+	mux.HandleFunc("/api/assignments/update", middleware.AuthMiddleware(handlers.UpdateAssignment))
 	mux.HandleFunc("/api/assignments/delete", middleware.AuthMiddleware(handlers.DeleteAssignment))
 
 	// Health check endpoint

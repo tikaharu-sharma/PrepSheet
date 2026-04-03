@@ -26,12 +26,14 @@ func setupTestDB() {
 			email TEXT NOT NULL UNIQUE,
 			password TEXT NOT NULL,
 			role TEXT NOT NULL CHECK(role IN ('manager', 'employee')),
+			manager_id INTEGER,
 			status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'inactive')),
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		);`,
 		`CREATE TABLE IF NOT EXISTS restaurants (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			name TEXT NOT NULL UNIQUE,
+			manager_id INTEGER,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		);`,
 		`CREATE TABLE IF NOT EXISTS sales (
