@@ -16,6 +16,12 @@ import (
 // JWTSecret is the signing key for JWT tokens.
 var JWTSecret = []byte("prepsheet-secret-key-change-in-production")
 
+func getStoredPasswordHash(userID int) (string, error) {
+	var passwordHash string
+	err := database.DB.QueryRow("SELECT password FROM users WHERE id = ?", userID).Scan(&passwordHash)
+	return passwordHash, err
+}
+
 // Signup registers a new user.
 func Signup(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -124,6 +130,101 @@ func Login(w http.ResponseWriter, r *http.Request) {
 		Email:  user.Email,
 		Role:   user.Role,
 	})
+}
+
+// VerifyPassword checks whether the authenticated user's current password is correct.
+func VerifyPassword(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, `{"error": "Method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	userID, ok := r.Context().Value("user_id").(int)
+	if !ok {
+		http.Error(w, `{"error": "Unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+
+	var req models.VerifyPasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error": "Invalid request body"}`, http.StatusBadRequest)
+		return
+	}
+
+	if req.CurrentPassword == "" {
+		http.Error(w, `{"error": "Current password is required"}`, http.StatusBadRequest)
+		return
+	}
+
+	passwordHash, err := getStoredPasswordHash(userID)
+	if err != nil {
+		http.Error(w, `{"error": "User not found"}`, http.StatusUnauthorized)
+		return
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(req.CurrentPassword)); err != nil {
+		http.Error(w, `{"error": "Current password is incorrect"}`, http.StatusUnauthorized)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "Current password verified"})
+}
+
+// ChangePassword updates the authenticated user's password after verifying the current password.
+func ChangePassword(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut {
+		http.Error(w, `{"error": "Method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	userID, ok := r.Context().Value("user_id").(int)
+	if !ok {
+		http.Error(w, `{"error": "Unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+
+	var req models.ChangePasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error": "Invalid request body"}`, http.StatusBadRequest)
+		return
+	}
+
+	if req.CurrentPassword == "" || req.NewPassword == "" {
+		http.Error(w, `{"error": "Current password and new password are required"}`, http.StatusBadRequest)
+		return
+	}
+
+	if req.CurrentPassword == req.NewPassword {
+		http.Error(w, `{"error": "New password must be different from the current password"}`, http.StatusBadRequest)
+		return
+	}
+
+	passwordHash, err := getStoredPasswordHash(userID)
+	if err != nil {
+		http.Error(w, `{"error": "User not found"}`, http.StatusUnauthorized)
+		return
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(req.CurrentPassword)); err != nil {
+		http.Error(w, `{"error": "Current password is incorrect"}`, http.StatusUnauthorized)
+		return
+	}
+
+	newPasswordHash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+	if err != nil {
+		http.Error(w, `{"error": "Failed to hash password"}`, http.StatusInternalServerError)
+		return
+	}
+
+	_, err = database.DB.Exec("UPDATE users SET password = ? WHERE id = ?", string(newPasswordHash), userID)
+	if err != nil {
+		http.Error(w, `{"error": "Failed to update password"}`, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "Password updated successfully"})
 }
 
 // GetUsers returns employees managed by the logged-in manager, optionally with their assigned restaurants

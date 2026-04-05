@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -9,6 +10,11 @@ import (
 
 	"prepsheet-backend/models"
 )
+
+func requestWithUserID(req *http.Request, userID int) *http.Request {
+	ctx := context.WithValue(req.Context(), "user_id", userID) //nolint:staticcheck
+	return req.WithContext(ctx)
+}
 
 func TestSignup_Success(t *testing.T) {
 	setupTestDB()
@@ -329,5 +335,81 @@ func TestUpdateUserStatus_InvalidStatus(t *testing.T) {
 
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected status 400, got %d", rr.Code)
+	}
+}
+
+func TestVerifyPassword_Success(t *testing.T) {
+	setupTestDB()
+	defer teardownTestDB()
+
+	signupBody := `{"name":"Manager","email":"manager@example.com","password":"current-pass","role":"manager"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/signup", bytes.NewBufferString(signupBody))
+	req.Header.Set("Content-Type", "application/json")
+	Signup(httptest.NewRecorder(), req)
+
+	verifyBody := `{"current_password":"current-pass"}`
+	verifyReq := httptest.NewRequest(http.MethodPost, "/api/users/verify-password", bytes.NewBufferString(verifyBody))
+	verifyReq.Header.Set("Content-Type", "application/json")
+	verifyReq = requestWithUserID(verifyReq, 1)
+	rr := httptest.NewRecorder()
+
+	VerifyPassword(rr, verifyReq)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestChangePassword_Success(t *testing.T) {
+	setupTestDB()
+	defer teardownTestDB()
+
+	signupBody := `{"name":"Manager","email":"manager@example.com","password":"current-pass","role":"manager"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/signup", bytes.NewBufferString(signupBody))
+	req.Header.Set("Content-Type", "application/json")
+	Signup(httptest.NewRecorder(), req)
+
+	changeBody := `{"current_password":"current-pass","new_password":"new-pass-123"}`
+	changeReq := httptest.NewRequest(http.MethodPut, "/api/users/change-password", bytes.NewBufferString(changeBody))
+	changeReq.Header.Set("Content-Type", "application/json")
+	changeReq = requestWithUserID(changeReq, 1)
+	rr := httptest.NewRecorder()
+
+	ChangePassword(rr, changeReq)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	loginBody := `{"email":"manager@example.com","password":"new-pass-123"}`
+	loginReq := httptest.NewRequest(http.MethodPost, "/api/login", bytes.NewBufferString(loginBody))
+	loginReq.Header.Set("Content-Type", "application/json")
+	loginRR := httptest.NewRecorder()
+	Login(loginRR, loginReq)
+
+	if loginRR.Code != http.StatusOK {
+		t.Fatalf("expected login with new password to succeed, got %d: %s", loginRR.Code, loginRR.Body.String())
+	}
+}
+
+func TestChangePassword_WrongCurrentPassword(t *testing.T) {
+	setupTestDB()
+	defer teardownTestDB()
+
+	signupBody := `{"name":"Manager","email":"manager@example.com","password":"current-pass","role":"manager"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/signup", bytes.NewBufferString(signupBody))
+	req.Header.Set("Content-Type", "application/json")
+	Signup(httptest.NewRecorder(), req)
+
+	changeBody := `{"current_password":"wrong-pass","new_password":"new-pass-123"}`
+	changeReq := httptest.NewRequest(http.MethodPut, "/api/users/change-password", bytes.NewBufferString(changeBody))
+	changeReq.Header.Set("Content-Type", "application/json")
+	changeReq = requestWithUserID(changeReq, 1)
+	rr := httptest.NewRecorder()
+
+	ChangePassword(rr, changeReq)
+
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status 401, got %d: %s", rr.Code, rr.Body.String())
 	}
 }

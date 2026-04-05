@@ -229,6 +229,47 @@ export async function updateEmployee(req: UpdateEmployeeRequest): Promise<{ mess
   return data as { message: string };
 }
 
+export async function verifyCurrentPassword(currentPassword: string): Promise<{ message: string }> {
+  const response = await fetch(`${API_BASE_URL}/users/verify-password`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ current_password: currentPassword }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ error: 'Failed to verify password' }));
+    throw {
+      message: errorData.message || errorData.error || 'Failed to verify password',
+      status: response.status,
+    } as ApiError;
+  }
+
+  const data = await response.json();
+  return data as { message: string };
+}
+
+export async function changePassword(currentPassword: string, newPassword: string): Promise<{ message: string }> {
+  const response = await fetch(`${API_BASE_URL}/users/change-password`, {
+    method: 'PUT',
+    headers: authHeaders(),
+    body: JSON.stringify({
+      current_password: currentPassword,
+      new_password: newPassword,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ error: 'Failed to change password' }));
+    throw {
+      message: errorData.message || errorData.error || 'Failed to change password',
+      status: response.status,
+    } as ApiError;
+  }
+
+  const data = await response.json();
+  return data as { message: string };
+}
+
 export async function deleteEmployee(userId: number): Promise<{ message: string }> {
   const response = await fetch(`${API_BASE_URL}/users/delete?id=${userId}`, {
     method: 'DELETE',
