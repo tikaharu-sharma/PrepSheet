@@ -20,7 +20,6 @@ import ReceiptIcon from "@mui/icons-material/Receipt";
 import StoreIcon from "@mui/icons-material/Store";
 import InsightsIcon from "@mui/icons-material/Insights";
 import SettingsIcon from "@mui/icons-material/Settings";
-import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
 import LogoutIcon from "@mui/icons-material/Logout";
 import { useNavigate, useLocation, Link as RouterLink } from 'react-router-dom'
 import { clearAuthSession } from '../lib/auth'
@@ -74,20 +73,12 @@ const menuItems: MenuItem[] = [
   { text: "Users", icon: <PeopleIcon />, path: "/users", roles: ["manager"] },
   { text: "Reports", icon: <BarChartIcon />, path: "/reports", roles: ["manager", "employee"] },
   { text: "Restaurants", icon: <StoreIcon />, path: "/restaurants", roles: ["manager"] },
-  { text: "Data Visualization", icon: <InsightsIcon />, path: "/visualization", roles: ["manager"] }
-];
-
-const adminItems: MenuItem[] = [
-  { text: "Admin Role", icon: <AdminPanelSettingsIcon />, path: "/admin-role", roles: ["manager"] },
+  { text: "Data Visualization", icon: <InsightsIcon />, path: "/visualization", roles: ["manager"] },
   { text: "Settings", icon: <SettingsIcon />, path: "/settings", roles: ["manager"] }
 ];
 
 
 const filteredMenuItems = menuItems.filter(item =>
-  currentUserRole ? item.roles.includes(currentUserRole) : false
-);
-
-const filteredAdminItems = adminItems.filter(item =>
   currentUserRole ? item.roles.includes(currentUserRole) : false
 );
 
@@ -159,36 +150,6 @@ const getItemStyle = (path: string) => ({
             </ListItemButton>
           ))}
         </List>
-
-        {/* ADMIN LABEL */}
-
-        {filteredAdminItems.length > 0 && (
-            <>
-              <Typography variant="caption" sx={{ mt: 2, mb: 1 }}>
-                ADMIN
-              </Typography>
-
-              <List>
-                {filteredAdminItems.map((item) => (
-                  <ListItemButton
-                    key={item.text}
-                    component={RouterLink}
-                    to={item.path}
-                    sx={getItemStyle(item.path)}
-                  >
-                    <ListItemIcon
-                      sx={{
-                        color: location.pathname === item.path ? "#ffffff" : "inherit"
-                      }}
-                    >
-                      {item.icon}
-                    </ListItemIcon>
-                    <ListItemText primary={item.text} />
-                  </ListItemButton>
-                ))}
-              </List>
-            </>
-          )}
         </Box>
 
       {/* BOTTOM PROFILE */}
