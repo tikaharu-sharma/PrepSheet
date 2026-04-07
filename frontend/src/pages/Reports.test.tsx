@@ -1,7 +1,7 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import Reports from './Reports'
-import { fetchMonthlyReport, fetchSales } from '../lib/api'
+import { fetchSales } from '../lib/api'
 import { RestaurantContext } from '../context/RestaurantContext'
 import type { RestaurantContextType } from '../context/RestaurantContext'
 
@@ -10,12 +10,10 @@ vi.mock('../lib/api', async (importOriginal) => {
   return {
     ...actual,
     fetchSales: vi.fn(),
-    fetchMonthlyReport: vi.fn(),
   }
 })
 
 const mockedFetchSales = vi.mocked(fetchSales)
-const mockedFetchMonthlyReport = vi.mocked(fetchMonthlyReport)
 
 function renderReports() {
   const value: RestaurantContextType = {
@@ -59,32 +57,27 @@ describe('Reports page', () => {
         created_at: '2026-03-24T00:00:00Z',
       },
     ])
-    mockedFetchMonthlyReport.mockResolvedValue({
-      month: '2026-03',
-      total_sales: 500,
-      total_lunch: 200,
-      total_dinner: 300,
-      entry_count: 1,
-    })
   })
 
-  it('renders monthly totals and the computed total sale column', async () => {
+  it('renders the monthly grid with the accountant-style columns', async () => {
     renderReports()
 
-    expect((await screen.findAllByText('$500.00')).length).toBeGreaterThanOrEqual(2)
-    expect(screen.getAllByText('$200.00').length).toBeGreaterThanOrEqual(2)
-    expect(screen.getAllByText('$300.00').length).toBeGreaterThanOrEqual(2)
-    expect(screen.getByText('$40.00')).toBeInTheDocument()
-    expect(screen.getAllByText('$500.00').length).toBeGreaterThan(0)
+    fireEvent.change(screen.getByLabelText('Month'), { target: { value: '2026-03' } })
+
+    expect(await screen.findByText('March 2026')).toBeInTheDocument()
+    expect(screen.getAllByText('TOTAL').length).toBeGreaterThan(0)
+    expect(screen.getByText('CREDIT')).toBeInTheDocument()
+    expect(screen.getByText((content) => content.includes('200'))).toBeInTheDocument()
+    expect(screen.getByText((content) => content.includes('500'))).toBeInTheDocument()
+    expect(screen.getByText((content) => content.includes('150'))).toBeInTheDocument()
   })
 
   it('refetches reports for a selected restaurant', async () => {
     const user = userEvent.setup()
     renderReports()
 
-    await screen.findByText('Daily Sales Entries')
+    await screen.findByText('Monthly restaurant report view.')
     mockedFetchSales.mockClear()
-    mockedFetchMonthlyReport.mockClear()
 
     const restaurantSelect = screen.getByRole('combobox', { name: /restaurant/i })
     await user.click(restaurantSelect)
@@ -94,19 +87,27 @@ describe('Reports page', () => {
       expect(mockedFetchSales).toHaveBeenCalledWith(
         expect.objectContaining({ restaurantId: 2 }),
       )
-      expect(mockedFetchMonthlyReport).toHaveBeenCalledWith(expect.any(String), 2)
     })
+  })
+
+  it('opens a day detail popup when a report date is clicked', async () => {
+    const user = userEvent.setup()
+    renderReports()
+
+    fireEvent.change(screen.getByLabelText('Month'), { target: { value: '2026-03' } })
+
+    await user.click(await screen.findByRole('button', { name: /24/ }))
+
+    expect(await screen.findByText(/Lunch Sale:/i)).toBeInTheDocument()
+    expect(screen.getByText(/Dinner Sale:/i)).toBeInTheDocument()
+    expect(screen.getByText(/Credit Sale:/i)).toBeInTheDocument()
+    expect(screen.getByText(/Reji Money:/i)).toBeInTheDocument()
+    expect(screen.getByText(/Bank Deposit:/i)).toBeInTheDocument()
+    expect(screen.getByText(/Vegetables/i)).toBeInTheDocument()
   })
 
   it('shows an error state when report loading fails', async () => {
     mockedFetchSales.mockRejectedValueOnce(new Error('Failed to fetch reports'))
-    mockedFetchMonthlyReport.mockResolvedValueOnce({
-      month: '2026-03',
-      total_sales: 0,
-      total_lunch: 0,
-      total_dinner: 0,
-      entry_count: 0,
-    })
 
     renderReports()
 

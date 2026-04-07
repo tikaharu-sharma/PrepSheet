@@ -2,9 +2,12 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   Alert,
   Box,
-  Card,
   CircularProgress,
   Container,
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  MenuItem,
   Paper,
   Stack,
   Table,
@@ -15,45 +18,97 @@ import {
   TableRow,
   TextField,
   Typography,
-  MenuItem,
 } from '@mui/material'
-import { fetchMonthlyReport, fetchSales, type MonthlyReport, type SaleRecord } from '../lib/api'
+import { fetchSales, type SaleRecord } from '../lib/api'
 import { useRestaurant } from '../context/useRestaurant'
 
 const getCurrentMonth = () => new Date().toISOString().slice(0, 7)
 
-const formatCurrency = (value: number) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value)
+const getMonthDateRange = (month: string) => {
+  const [year, monthValue] = month.split('-').map(Number)
+  const lastDay = new Date(year, monthValue, 0).getDate()
+
+  return {
+    startDate: `${month}-01`,
+    endDate: `${month}-${String(lastDay).padStart(2, '0')}`,
+    daysInMonth: lastDay,
+  }
+}
+
+const formatCurrency = (value: number | null | undefined) => {
+  if (!value) return ''
+  return new Intl.NumberFormat('ja-JP', {
+    style: 'currency',
+    currency: 'JPY',
+    maximumFractionDigits: 0,
+  }).format(value)
+}
+
+const formatMonthTitle = (month: string) => {
+  const [year, monthValue] = month.split('-').map(Number)
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(new Date(Date.UTC(year, monthValue - 1, 1)))
+}
+
+const formatDayLabel = (dateString: string) =>
+  new Intl.DateTimeFormat('en-US', {
+    weekday: 'short',
+    day: 'numeric',
+    timeZone: 'UTC',
+  }).format(new Date(`${dateString}T00:00:00Z`)).replace(' ', ', ')
+
+interface ReportRow {
+  date: string
+  dateLabel: string
+  sale: SaleRecord | null
+  lunchPersons: number | null
+  lunchSale: number | null
+  dinnerPersons: number | null
+  totalSale: number | null
+  totalCredit: number | null
+}
 
 export default function Reports() {
   const { restaurants } = useRestaurant()
   const [month, setMonth] = useState(getCurrentMonth())
   const [restaurantId, setRestaurantId] = useState<number | ''>('')
   const [sales, setSales] = useState<SaleRecord[]>([])
-  const [summary, setSummary] = useState<MonthlyReport | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [selectedRow, setSelectedRow] = useState<ReportRow | null>(null)
+
+  useEffect(() => {
+    if (restaurantId === '' && restaurants.length > 0) {
+      setRestaurantId(restaurants[0].id)
+    }
+  }, [restaurants, restaurantId])
 
   useEffect(() => {
     let isMounted = true
 
     const loadReports = async () => {
+      if (restaurantId === '') {
+        setSales([])
+        setLoading(false)
+        return
+      }
+
       try {
         setLoading(true)
         setError(null)
 
-        const [salesData, monthlyData] = await Promise.all([
-          fetchSales({
-            startDate: `${month}-01`,
-            endDate: `${month}-31`,
-            restaurantId: restaurantId || undefined,
-          }),
-          fetchMonthlyReport(month, restaurantId || undefined),
-        ])
+        const { startDate, endDate } = getMonthDateRange(month)
+        const salesData = await fetchSales({
+          startDate,
+          endDate,
+          restaurantId,
+        })
 
         if (!isMounted) return
         setSales(salesData)
-        setSummary(monthlyData)
       } catch (err) {
         if (!isMounted) return
         if (err instanceof Error && err.message) {
@@ -77,17 +132,34 @@ export default function Reports() {
     }
   }, [month, restaurantId])
 
-  const totalExpenditures = useMemo(
-    () =>
-      sales.reduce(
-        (sum, sale) => sum + sale.expenditures.reduce((expenseSum, exp) => expenseSum + exp.amount, 0),
-        0
-      ),
-    [sales]
-  )
+  const selectedRestaurant = restaurants.find((restaurant) => restaurant.id === restaurantId) ?? null
+
+  const rows = useMemo<ReportRow[]>(() => {
+    const { daysInMonth } = getMonthDateRange(month)
+    const salesByDate = new Map(sales.map((sale) => [sale.date, sale]))
+    const [year, monthValue] = month.split('-').map(Number)
+
+    return Array.from({ length: daysInMonth }, (_, index) => {
+      const date = new Date(Date.UTC(year, monthValue - 1, index + 1))
+      const isoDate = date.toISOString().slice(0, 10)
+      const sale = salesByDate.get(isoDate)
+      const totalSale = sale ? sale.lunch_sale + sale.dinner_sale : null
+
+      return {
+        date: isoDate,
+        dateLabel: formatDayLabel(isoDate),
+        sale: sale ?? null,
+        lunchPersons: sale?.lunch_head_count ?? null,
+        lunchSale: sale?.lunch_sale ?? null,
+        dinnerPersons: sale?.dinner_head_count ?? null,
+        totalSale,
+        totalCredit: sale?.credit_sale ?? null,
+      }
+    })
+  }, [month, sales])
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
+    <Container maxWidth="xl" sx={{ py: 4 }}>
       <Stack spacing={3}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
           <Box>
@@ -95,7 +167,7 @@ export default function Reports() {
               Reports
             </Typography>
             <Typography color="text.secondary">
-              View monthly sales totals and submitted daily entries.
+              Monthly restaurant report view.
             </Typography>
           </Box>
 
@@ -112,9 +184,8 @@ export default function Reports() {
               label="Restaurant"
               value={restaurantId}
               onChange={(e) => setRestaurantId(e.target.value === '' ? '' : Number(e.target.value))}
-              sx={{ minWidth: 240 }}
+              sx={{ minWidth: 260 }}
             >
-              <MenuItem value="">All Restaurants</MenuItem>
               {restaurants.map((restaurant) => (
                 <MenuItem key={restaurant.id} value={restaurant.id}>
                   {restaurant.name}
@@ -131,99 +202,184 @@ export default function Reports() {
         ) : error ? (
           <Alert severity="error">{error}</Alert>
         ) : (
-          <>
-            <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
-              <Card sx={{ p: 3, flex: 1 }}>
-                <Typography variant="overline" color="text.secondary">
-                  Total Sales
+          <Paper elevation={4} sx={{ p: 3, overflow: 'hidden' }}>
+            <Stack spacing={2}>
+              <Box sx={{ textAlign: 'center' }}>
+                <Typography variant="h4" sx={{ fontWeight: 700, letterSpacing: 1 }}>
+                  {selectedRestaurant?.name?.toUpperCase() ?? 'RESTAURANT REPORT'}
                 </Typography>
-                <Typography variant="h5">
-                  {formatCurrency(summary?.total_sales ?? 0)}
-                </Typography>
-              </Card>
-              <Card sx={{ p: 3, flex: 1 }}>
-                <Typography variant="overline" color="text.secondary">
-                  Lunch Sales
-                </Typography>
-                <Typography variant="h5">
-                  {formatCurrency(summary?.total_lunch ?? 0)}
-                </Typography>
-              </Card>
-              <Card sx={{ p: 3, flex: 1 }}>
-                <Typography variant="overline" color="text.secondary">
-                  Dinner Sales
-                </Typography>
-                <Typography variant="h5">
-                  {formatCurrency(summary?.total_dinner ?? 0)}
-                </Typography>
-              </Card>
-              <Card sx={{ p: 3, flex: 1 }}>
-                <Typography variant="overline" color="text.secondary">
-                  Expenditures
-                </Typography>
-                <Typography variant="h5">
-                  {formatCurrency(totalExpenditures)}
-                </Typography>
-              </Card>
-            </Stack>
+              </Box>
 
-            <Card sx={{ p: 3 }}>
-              <Typography variant="h6" sx={{ mb: 2 }}>
-                Monthly Summary
-              </Typography>
-              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={3}>
-                <Typography>Month: {summary?.month ?? month}</Typography>
-                <Typography>Entries: {summary?.entry_count ?? 0}</Typography>
-              </Stack>
-            </Card>
-
-            <Card sx={{ p: 3 }}>
-              <Typography variant="h6" sx={{ mb: 2 }}>
-                Daily Sales Entries
-              </Typography>
-
-              {sales.length === 0 ? (
-                <Typography color="text.secondary">
-                  No sales entries found for the selected month.
-                </Typography>
-              ) : (
-                <TableContainer component={Paper}>
-                  <Table size="small">
-                    <TableHead>
-                      <TableRow>
-                        <TableCell>Date</TableCell>
-                        <TableCell>Restaurant</TableCell>
-                        <TableCell align="right">Lunch Persons</TableCell>
-                        <TableCell align="right">Lunch Sale</TableCell>
-                        <TableCell align="right">Dinner Persons</TableCell>
-                        <TableCell align="right">Dinner Sale</TableCell>
-                        <TableCell align="right">Total Sale</TableCell>
-                        <TableCell align="right">Credit Sale</TableCell>
-                        <TableCell align="right">Reji Money</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {sales.map((sale) => (
-                        <TableRow key={sale.id}>
-                          <TableCell>{sale.date}</TableCell>
-                          <TableCell>{sale.restaurant_name}</TableCell>
-                          <TableCell align="right">{sale.lunch_head_count}</TableCell>
-                          <TableCell align="right">{formatCurrency(sale.lunch_sale)}</TableCell>
-                          <TableCell align="right">{sale.dinner_head_count}</TableCell>
-                          <TableCell align="right">{formatCurrency(sale.dinner_sale)}</TableCell>
-                          <TableCell align="right">{formatCurrency(sale.lunch_sale + sale.dinner_sale)}</TableCell>
-                          <TableCell align="right">{formatCurrency(sale.credit_sale)}</TableCell>
-                          <TableCell align="right">{formatCurrency(sale.reji_money)}</TableCell>
-                        </TableRow>
+              <TableContainer sx={{ overflowX: 'auto' }}>
+                <Table
+                  size="small"
+                  sx={{
+                    tableLayout: 'fixed',
+                    width: '100%',
+                    '& .MuiTableCell-root': {
+                      border: '1px solid #1f1f1f',
+                      fontSize: '0.95rem',
+                      py: 0.75,
+                    },
+                  }}
+                >
+                  <TableHead>
+                    <TableRow>
+                      <TableCell
+                        rowSpan={2}
+                        align="center"
+                        sx={{ fontWeight: 700, width: '14%', backgroundColor: '#ffffff' }}
+                      >
+                        DATE
+                      </TableCell>
+                      <TableCell align="center" sx={{ fontWeight: 700, backgroundColor: '#ffffff' }}>
+                        LUNCH
+                      </TableCell>
+                      <TableCell align="center" sx={{ fontWeight: 700, backgroundColor: '#ffffff' }}>
+                        LUNCH
+                      </TableCell>
+                      <TableCell align="center" sx={{ fontWeight: 700, backgroundColor: '#ffffff' }}>
+                        DINNER
+                      </TableCell>
+                      <TableCell align="center" sx={{ fontWeight: 700, backgroundColor: '#ffffff' }}>
+                        DINNER
+                      </TableCell>
+                      <TableCell align="center" sx={{ fontWeight: 700, backgroundColor: '#ffffff' }}>
+                        TOTAL
+                      </TableCell>
+                      <TableCell align="center" sx={{ fontWeight: 700, backgroundColor: '#ffffff' }}>
+                        TOTAL
+                      </TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell align="center" sx={{ fontWeight: 700, backgroundColor: '#ffffff' }}>
+                        PERSONS
+                      </TableCell>
+                      <TableCell align="center" sx={{ fontWeight: 700, backgroundColor: '#ffffff' }}>
+                        SALE
+                      </TableCell>
+                      <TableCell align="center" sx={{ fontWeight: 700, backgroundColor: '#ffffff' }}>
+                        PERSON
+                      </TableCell>
+                      <TableCell align="center" sx={{ fontWeight: 700, backgroundColor: '#ffffff' }}>
+                        SALE
+                      </TableCell>
+                      <TableCell align="center" sx={{ fontWeight: 700, backgroundColor: '#ffffff' }}>
+                        SALE
+                      </TableCell>
+                      <TableCell align="center" sx={{ fontWeight: 700, backgroundColor: '#ffffff' }}>
+                        CREDIT
+                      </TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell sx={{ fontWeight: 700, backgroundColor: '#ffffff' }}>
+                        {formatMonthTitle(month)}
+                      </TableCell>
+                      {Array.from({ length: 6 }).map((_, index) => (
+                        <TableCell key={index} sx={{ backgroundColor: '#ffffff' }} />
                       ))}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-              )}
-            </Card>
-          </>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {rows.map((row) => (
+                      <TableRow key={row.date}>
+                        <TableCell sx={{ fontWeight: 700, backgroundColor: '#ffffff' }}>
+                          <Typography
+                            component="button"
+                            type="button"
+                            onClick={() => setSelectedRow(row)}
+                            sx={{
+                              border: 0,
+                              background: 'transparent',
+                              p: 0,
+                              font: 'inherit',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              color: '#1f1f1f',
+                              textAlign: 'left',
+                              '&:hover': { textDecoration: 'underline' },
+                            }}
+                          >
+                            {row.dateLabel}
+                          </Typography>
+                        </TableCell>
+                        <TableCell align="right" sx={{ backgroundColor: '#ffffff' }}>
+                          {row.lunchPersons ?? ''}
+                        </TableCell>
+                        <TableCell align="right" sx={{ backgroundColor: '#ffffff' }}>
+                          {formatCurrency(row.lunchSale)}
+                        </TableCell>
+                        <TableCell align="right" sx={{ backgroundColor: '#ffffff' }}>
+                          {row.dinnerPersons ?? ''}
+                        </TableCell>
+                        <TableCell align="right" sx={{ backgroundColor: '#ffffff' }}>
+                          {formatCurrency(row.totalSale ? row.totalSale - (row.lunchSale ?? 0) : null)}
+                        </TableCell>
+                        <TableCell align="right" sx={{ backgroundColor: '#ffffff' }}>
+                          {formatCurrency(row.totalSale)}
+                        </TableCell>
+                        <TableCell align="right" sx={{ backgroundColor: '#ffffff' }}>
+                          {formatCurrency(row.totalCredit)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Stack>
+          </Paper>
         )}
       </Stack>
+
+      <Dialog open={Boolean(selectedRow)} onClose={() => setSelectedRow(null)} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          {selectedRestaurant?.name ?? 'Restaurant'} | {selectedRow?.date ? formatDayLabel(selectedRow.date) : ''}
+        </DialogTitle>
+        <DialogContent dividers>
+          {selectedRow?.sale ? (
+            <Stack spacing={2}>
+              <Stack spacing={1}>
+                <Typography><strong>Lunch Sale:</strong> {formatCurrency(selectedRow.sale.lunch_sale) || '¥0'}</Typography>
+                <Typography><strong>Dinner Sale:</strong> {formatCurrency(selectedRow.sale.dinner_sale) || '¥0'}</Typography>
+                <Typography><strong>Total Sale:</strong> {formatCurrency(selectedRow.sale.lunch_sale + selectedRow.sale.dinner_sale) || '¥0'}</Typography>
+                <Typography><strong>Credit Sale:</strong> {formatCurrency(selectedRow.sale.credit_sale) || '¥0'}</Typography>
+                <Typography><strong>Reji Money:</strong> {formatCurrency(selectedRow.sale.reji_money) || '¥0'}</Typography>
+                <Typography><strong>Bank Deposit:</strong> Not available yet</Typography>
+              </Stack>
+
+              <Box>
+                <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
+                  Expenditures
+                </Typography>
+                {selectedRow.sale.expenditures.length > 0 ? (
+                  <Stack spacing={0.75}>
+                    {selectedRow.sale.expenditures.map((expense, index) => (
+                      <Typography key={`${expense.title}-${index}`}>
+                        {expense.title}: {formatCurrency(expense.amount) || '¥0'}
+                      </Typography>
+                    ))}
+                  </Stack>
+                ) : (
+                  <Typography color="text.secondary">No expenditures recorded.</Typography>
+                )}
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
+                  Notes
+                </Typography>
+                <Typography color={selectedRow.sale.note ? 'text.primary' : 'text.secondary'}>
+                  {selectedRow.sale.note || 'No notes recorded.'}
+                </Typography>
+              </Box>
+            </Stack>
+          ) : (
+            <Typography color="text.secondary">
+              No sales entry was recorded for this date. The restaurant may have been closed.
+            </Typography>
+          )}
+        </DialogContent>
+      </Dialog>
     </Container>
   )
 }
