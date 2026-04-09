@@ -18,20 +18,21 @@ interface TrendPoint {
 
 interface Props {
   data: TrendPoint[];
+  title: string;
 }
 
 const formatCurrency = (value: number) =>
-  new Intl.NumberFormat("en-US", {
+  new Intl.NumberFormat("ja-JP", {
     style: "currency",
-    currency: "USD",
+    currency: "JPY",
     maximumFractionDigits: 0,
   }).format(value);
 
-export default function SalesTrendChart({ data }: Props) {
+export default function SalesTrendChart({ data, title }: Props) {
   return (
     <Card sx={{ p: 3, borderRadius: 3 }}>
       <Typography variant="h6" sx={{ mb: 2 }}>
-        Sales Trend (Last 7 Days)
+        {title}
       </Typography>
 
       <Box sx={{ width: "100%", height: 300 }}>

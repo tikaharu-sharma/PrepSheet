@@ -32,7 +32,7 @@ export interface DashboardSummaryData {
 }
 
 const formatCurrency = (value: number) =>
-  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value);
+  new Intl.NumberFormat("ja-JP", { style: "currency", currency: "JPY", maximumFractionDigits: 0 }).format(value);
 
 const formatTrend = (current: number, previous: number) => {
   if (previous === 0) {
@@ -107,9 +107,11 @@ const DashboardCard: React.FC<DashboardCardProps> = ({
 
 interface Props {
   summary: DashboardSummaryData;
+  currentLabel: string;
+  previousLabel: string;
 }
 
-export default function DashboardSummaryCards({ summary }: Props) {
+export default function DashboardSummaryCards({ summary, currentLabel, previousLabel }: Props) {
   const totalTrend = formatTrend(summary.totalSales, summary.previousTotalSales);
   const lunchTrend = formatTrend(summary.lunchSales, summary.previousLunchSales);
   const dinnerTrend = formatTrend(summary.dinnerSales, summary.previousDinnerSales);
@@ -117,33 +119,33 @@ export default function DashboardSummaryCards({ summary }: Props) {
   const cardsData: DashboardCardProps[] = [
     {
       title: "Total Sales",
-      subtitle: "Last 7 days",
+      subtitle: currentLabel,
       value: formatCurrency(summary.totalSales),
       trend: totalTrend.trend,
       trendPercent: totalTrend.percent,
-      previousText: "Previous 7 days",
+      previousText: previousLabel,
       previousValue: formatCurrency(summary.previousTotalSales),
       detailsLink: "/reports",
       icon: <AttachMoneyIcon />,
     },
     {
       title: "Lunch Sales",
-      subtitle: "Last 7 days",
+      subtitle: currentLabel,
       value: formatCurrency(summary.lunchSales),
       trend: lunchTrend.trend,
       trendPercent: lunchTrend.percent,
-      previousText: "Previous 7 days",
+      previousText: previousLabel,
       previousValue: formatCurrency(summary.previousLunchSales),
       detailsLink: "/reports",
       icon: <LunchDiningIcon />,
     },
     {
       title: "Dinner Sales",
-      subtitle: "Last 7 days",
+      subtitle: currentLabel,
       value: formatCurrency(summary.dinnerSales),
       trend: dinnerTrend.trend,
       trendPercent: dinnerTrend.percent,
-      previousText: "Previous 7 days",
+      previousText: previousLabel,
       previousValue: formatCurrency(summary.previousDinnerSales),
       detailsLink: "/reports",
       icon: <DinnerDiningIcon />,

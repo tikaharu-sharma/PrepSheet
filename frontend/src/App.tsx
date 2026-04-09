@@ -6,7 +6,6 @@ import Users from "./pages/Users";
 import Restaurants from "./pages/Restaurants";
 import Reports from "./pages/Reports";
 import DataVisualization from "./pages/DataVisualization";
-import AdminRole from "./pages/AdminRole";
 import Settings from "./pages/Settings";
 import RequireAuth from "./features/RequireAuth";
 import RequireRole from "./features/RequireRole";
@@ -34,7 +33,6 @@ export default function App() {
             <Route element={<AppLayout><Users /></AppLayout>} path="/users" />
             <Route element={<AppLayout><Restaurants /></AppLayout>} path="/restaurants" />
             <Route element={<AppLayout><DataVisualization /></AppLayout>} path="/visualization" />
-            <Route element={<AppLayout><AdminRole /></AppLayout>} path="/admin-role" />
             <Route element={<AppLayout><Settings /></AppLayout>} path="/settings" />
           </Route>
         </Route>
