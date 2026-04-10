@@ -7,8 +7,11 @@ import {
   Dialog,
   DialogContent,
   DialogTitle,
+  FormControl,
+  InputLabel,
   MenuItem,
   Paper,
+  Select,
   Stack,
   Table,
   TableBody,
@@ -16,10 +19,11 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  TextField,
   Typography,
 } from '@mui/material'
+import type { SelectChangeEvent } from '@mui/material/Select'
 import { fetchSales, type SaleRecord } from '../lib/api'
+import { downloadMonthlyReportPdf, exportMonthlyReportExcel, exportMonthlyReportPdf } from '../lib/monthlyReportExport'
 import { useRestaurant } from '../context/useRestaurant'
 
 const getCurrentMonth = () => new Date().toISOString().slice(0, 7)
@@ -37,12 +41,11 @@ const getMonthDateRange = (month: string) => {
 }
 
 const formatCurrency = (value: number | null | undefined) => {
-  if (!value) return ''
   return new Intl.NumberFormat('ja-JP', {
     style: 'currency',
     currency: 'JPY',
     maximumFractionDigits: 0,
-  }).format(value)
+  }).format(value ?? 0)
 }
 
 const formatMonthTitle = (month: string) => {
@@ -66,10 +69,16 @@ interface ReportRow {
   dateLabel: string
   sale: SaleRecord | null
   lunchPersons: number | null
-  lunchSale: number | null
+  lunchSale: number
   dinnerPersons: number | null
+  dinnerSale: number
+  totalPersons: number
   totalSale: number | null
-  totalCredit: number | null
+  grandTotalSale: number
+  totalCredit: number
+  tax10Sale: number
+  tax10Amount: number
+  totalShopping: number
 }
 
 const getAvailablePeriods = (sales: SaleRecord[]) =>
@@ -93,6 +102,8 @@ export default function Reports() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedRow, setSelectedRow] = useState<ReportRow | null>(null)
+  const [exportError, setExportError] = useState<string | null>(null)
+  const [exportAction, setExportAction] = useState('')
 
   useEffect(() => {
     if (restaurantId === '' && restaurants.length > 0) {
@@ -200,25 +211,206 @@ export default function Reports() {
     const { daysInMonth } = getMonthDateRange(month)
     const salesByDate = new Map(filteredSales.map((sale) => [sale.date, sale]))
     const [year, monthValue] = month.split('-').map(Number)
+    let runningGrandTotal = 0
 
     return Array.from({ length: daysInMonth }, (_, index) => {
       const date = new Date(Date.UTC(year, monthValue - 1, index + 1))
       const isoDate = date.toISOString().slice(0, 10)
       const sale = salesByDate.get(isoDate)
-      const totalSale = sale ? sale.lunch_sale + sale.dinner_sale : null
+      const lunchSale = sale?.lunch_sale ?? 0
+      const dinnerSale = sale?.dinner_sale ?? 0
+      const totalSale = lunchSale + dinnerSale
+      const totalPersons = (sale?.lunch_head_count ?? 0) + (sale?.dinner_head_count ?? 0)
+      const totalCredit = sale?.credit_sale ?? 0
+      const totalShopping = sale?.expenditures.reduce((sum, expense) => sum + expense.amount, 0) ?? 0
+      const tax10Sale = totalSale
+      const tax10Amount = Math.floor(totalSale / 11)
+
+      runningGrandTotal += totalSale
 
       return {
         date: isoDate,
         dateLabel: formatDayLabel(isoDate),
         sale: sale ?? null,
         lunchPersons: sale?.lunch_head_count ?? null,
-        lunchSale: sale?.lunch_sale ?? null,
+        lunchSale,
         dinnerPersons: sale?.dinner_head_count ?? null,
+        dinnerSale,
+        totalPersons,
         totalSale,
-        totalCredit: sale?.credit_sale ?? null,
+        grandTotalSale: runningGrandTotal,
+        totalCredit,
+        tax10Sale,
+        tax10Amount,
+        totalShopping,
       }
     })
   }, [filteredSales, month])
+
+  const totals = useMemo(
+    () =>
+      rows.reduce(
+        (acc, row) => ({
+          lunchPersons: acc.lunchPersons + (row.lunchPersons ?? 0),
+          lunchSale: acc.lunchSale + row.lunchSale,
+          dinnerPersons: acc.dinnerPersons + (row.dinnerPersons ?? 0),
+          dinnerSale: acc.dinnerSale + row.dinnerSale,
+          totalPersons: acc.totalPersons + row.totalPersons,
+          totalSale: acc.totalSale + (row.totalSale ?? 0),
+          grandTotalSale: row.grandTotalSale,
+          totalCredit: acc.totalCredit + row.totalCredit,
+          tax10Sale: acc.tax10Sale + row.tax10Sale,
+          tax10Amount: acc.tax10Amount + row.tax10Amount,
+          totalShopping: acc.totalShopping + row.totalShopping,
+        }),
+        {
+          lunchPersons: 0,
+          lunchSale: 0,
+          dinnerPersons: 0,
+          dinnerSale: 0,
+          totalPersons: 0,
+          totalSale: 0,
+          grandTotalSale: 0,
+          totalCredit: 0,
+          tax10Sale: 0,
+          tax10Amount: 0,
+          totalShopping: 0,
+        },
+      ),
+    [rows],
+  )
+
+  const reportTitle = useMemo(() => {
+    if (!selectedRestaurant?.name) {
+      return 'INDIAN RESTAURANT MINA'
+    }
+
+    const [baseName, branchName] = selectedRestaurant.name.split(' - ')
+    if (!branchName) {
+      return selectedRestaurant.name.toUpperCase()
+    }
+
+    return `${baseName.toUpperCase()} - ${branchName.toUpperCase()} BRANCH`
+  }, [selectedRestaurant])
+
+  const handleExportExcel = () => {
+    if (!month || rows.length === 0) return
+    setExportError(null)
+
+    exportMonthlyReportExcel({
+      title: reportTitle,
+      monthLabel: formatMonthTitle(month),
+      monthKey: month,
+      rows: rows.map((row) => ({
+        dateLabel: row.dateLabel,
+        lunchPersons: row.lunchPersons,
+        lunchSale: row.lunchSale,
+        dinnerPersons: row.dinnerPersons,
+        dinnerSale: row.dinnerSale,
+        totalPersons: row.totalPersons,
+        totalSale: row.totalSale ?? 0,
+        grandTotalSale: row.grandTotalSale,
+        creditSale: row.totalCredit,
+        tax10Sale: row.tax10Sale,
+        tax10Amount: row.tax10Amount,
+        totalShopping: row.totalShopping,
+      })),
+      totals: {
+        ...totals,
+        creditSale: totals.totalCredit,
+      },
+    })
+  }
+
+  const handleExportPdf = () => {
+    if (!month || rows.length === 0) return
+    setExportError(null)
+
+    try {
+      exportMonthlyReportPdf({
+        title: reportTitle,
+        monthLabel: formatMonthTitle(month),
+        rows: rows.map((row) => ({
+          dateLabel: row.dateLabel,
+          lunchPersons: row.lunchPersons,
+          lunchSale: row.lunchSale,
+          dinnerPersons: row.dinnerPersons,
+          dinnerSale: row.dinnerSale,
+          totalPersons: row.totalPersons,
+          totalSale: row.totalSale ?? 0,
+          grandTotalSale: row.grandTotalSale,
+          creditSale: row.totalCredit,
+          tax10Sale: row.tax10Sale,
+          tax10Amount: row.tax10Amount,
+          totalShopping: row.totalShopping,
+        })),
+        totals: {
+          ...totals,
+          creditSale: totals.totalCredit,
+        },
+      })
+    } catch (err) {
+      if (err instanceof Error) {
+        setExportError(err.message)
+        return
+      }
+
+      setExportError('Failed to export PDF')
+    }
+  }
+
+  const handleDownloadPdf = () => {
+    if (!month || rows.length === 0) return
+    setExportError(null)
+
+    try {
+      downloadMonthlyReportPdf({
+        title: reportTitle,
+        monthLabel: formatMonthTitle(month),
+        monthKey: month,
+        rows: rows.map((row) => ({
+          dateLabel: row.dateLabel,
+          lunchPersons: row.lunchPersons,
+          lunchSale: row.lunchSale,
+          dinnerPersons: row.dinnerPersons,
+          dinnerSale: row.dinnerSale,
+          totalPersons: row.totalPersons,
+          totalSale: row.totalSale ?? 0,
+          grandTotalSale: row.grandTotalSale,
+          creditSale: row.totalCredit,
+          tax10Sale: row.tax10Sale,
+          tax10Amount: row.tax10Amount,
+          totalShopping: row.totalShopping,
+        })),
+        totals: {
+          ...totals,
+          creditSale: totals.totalCredit,
+        },
+      })
+    } catch (err) {
+      if (err instanceof Error) {
+        setExportError(err.message)
+        return
+      }
+
+      setExportError('Failed to download PDF')
+    }
+  }
+
+  const handleExportActionChange = (event: SelectChangeEvent) => {
+    const action = String(event.target.value)
+    setExportAction(action)
+
+    if (action === 'excel') {
+      handleExportExcel()
+    } else if (action === 'preview-pdf') {
+      handleExportPdf()
+    } else if (action === 'download-pdf') {
+      handleDownloadPdf()
+    }
+
+    setExportAction('')
+  }
 
   return (
     <Container maxWidth="xl" sx={{ py: 4 }}>
@@ -234,57 +426,83 @@ export default function Reports() {
           </Box>
 
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-            <TextField
-              select
-              label="Year"
-              value={yearSelectValue}
-              onChange={(e) => {
-                const nextYear = e.target.value
-                const nextMonthOptions = availablePeriods
-                  .filter((period) => period.startsWith(`${nextYear}-`))
-                  .map((period) => period.slice(5, 7))
+            <FormControl sx={{ minWidth: 120 }}>
+              <InputLabel id="reports-year-select-label">Year</InputLabel>
+              <Select
+                labelId="reports-year-select-label"
+                id="reports-year-select"
+                value={yearSelectValue}
+                label="Year"
+                onChange={(event: SelectChangeEvent) => {
+                  const nextYear = String(event.target.value)
+                  const nextMonthOptions = availablePeriods
+                    .filter((period) => period.startsWith(`${nextYear}-`))
+                    .map((period) => period.slice(5, 7))
 
-                setSelectedYear(nextYear)
-                setSelectedMonthNumber(nextMonthOptions[0] ?? '')
-              }}
-              sx={{ minWidth: 120 }}
-              disabled={availableYears.length === 0}
-            >
-              {availableYears.map((year) => (
-                <MenuItem key={year} value={year}>
-                  {year}
-                </MenuItem>
-              ))}
-            </TextField>
-            <TextField
-              select
-              label="Month"
-              value={monthSelectValue}
-              onChange={(e) => setSelectedMonthNumber(e.target.value)}
-              sx={{ minWidth: 140 }}
-              disabled={monthOptions.length === 0}
-            >
-              {monthOptions.map((option) => (
-                <MenuItem key={option.value} value={option.value}>
-                  {option.label}
-                </MenuItem>
-              ))}
-            </TextField>
-            <TextField
-              select
-              label="Restaurant"
-              value={restaurantId}
-              onChange={(e) => setRestaurantId(e.target.value === '' ? '' : Number(e.target.value))}
-              sx={{ minWidth: 260 }}
-            >
-              {restaurants.map((restaurant) => (
-                <MenuItem key={restaurant.id} value={restaurant.id}>
-                  {restaurant.name}
-                </MenuItem>
-              ))}
-            </TextField>
+                  setSelectedYear(nextYear)
+                  setSelectedMonthNumber(nextMonthOptions[0] ?? '')
+                }}
+                disabled={availableYears.length === 0}
+              >
+                {availableYears.map((year) => (
+                  <MenuItem key={year} value={year}>
+                    {year}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <FormControl sx={{ minWidth: 160 }}>
+              <InputLabel id="reports-month-select-label">Month</InputLabel>
+              <Select
+                labelId="reports-month-select-label"
+                id="reports-month-select"
+                value={monthSelectValue}
+                label="Month"
+                onChange={(event: SelectChangeEvent) => setSelectedMonthNumber(String(event.target.value))}
+                disabled={monthOptions.length === 0}
+              >
+                {monthOptions.map((option) => (
+                  <MenuItem key={option.value} value={option.value}>
+                    {option.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <FormControl sx={{ minWidth: 260 }}>
+              <InputLabel id="reports-restaurant-select-label">Restaurant</InputLabel>
+              <Select
+                labelId="reports-restaurant-select-label"
+                id="reports-restaurant-select"
+                value={restaurantId === '' ? '' : String(restaurantId)}
+                label="Restaurant"
+                onChange={(event: SelectChangeEvent) => setRestaurantId(event.target.value === '' ? '' : Number(event.target.value))}
+              >
+                {restaurants.map((restaurant) => (
+                  <MenuItem key={restaurant.id} value={String(restaurant.id)}>
+                    {restaurant.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <FormControl sx={{ minWidth: 180 }}>
+              <InputLabel id="reports-export-options-label">Export Options</InputLabel>
+              <Select
+                labelId="reports-export-options-label"
+                id="reports-export-options"
+                value={exportAction}
+                label="Export Options"
+                onChange={handleExportActionChange}
+                displayEmpty={false}
+                disabled={!month || rows.length === 0}
+              >
+                <MenuItem value="excel">Export Excel</MenuItem>
+                <MenuItem value="preview-pdf">Preview PDF</MenuItem>
+                <MenuItem value="download-pdf">Download PDF</MenuItem>
+              </Select>
+            </FormControl>
           </Stack>
         </Box>
+        {exportError ? <Alert severity="error">{exportError}</Alert> : null}
 
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
@@ -299,8 +517,9 @@ export default function Reports() {
             <Stack spacing={2}>
               <Box sx={{ textAlign: 'center' }}>
                 <Typography variant="h4" sx={{ fontWeight: 700, letterSpacing: 1 }}>
-                  {selectedRestaurant?.name?.toUpperCase() ?? 'RESTAURANT REPORT'}
+                  {reportTitle}
                 </Typography>
+                <Typography color="text.secondary">{formatMonthTitle(month)}</Typography>
               </Box>
 
               <TableContainer sx={{ overflowX: 'auto' }}>
@@ -321,27 +540,42 @@ export default function Reports() {
                       <TableCell
                         rowSpan={2}
                         align="center"
-                        sx={{ fontWeight: 700, width: '14%', backgroundColor: '#ffffff' }}
+                        sx={{ fontWeight: 700, width: '11%', backgroundColor: '#ffffff' }}
                       >
                         DATE
                       </TableCell>
                       <TableCell align="center" sx={{ fontWeight: 700, backgroundColor: '#ffffff' }}>
-                        LUNCH
+                        L
                       </TableCell>
                       <TableCell align="center" sx={{ fontWeight: 700, backgroundColor: '#ffffff' }}>
                         LUNCH
                       </TableCell>
                       <TableCell align="center" sx={{ fontWeight: 700, backgroundColor: '#ffffff' }}>
-                        DINNER
+                        D
                       </TableCell>
                       <TableCell align="center" sx={{ fontWeight: 700, backgroundColor: '#ffffff' }}>
                         DINNER
                       </TableCell>
                       <TableCell align="center" sx={{ fontWeight: 700, backgroundColor: '#ffffff' }}>
-                        TOTAL
+                        T
                       </TableCell>
                       <TableCell align="center" sx={{ fontWeight: 700, backgroundColor: '#ffffff' }}>
                         TOTAL
+                      </TableCell>
+                      <TableCell align="center" sx={{ fontWeight: 700, backgroundColor: '#ffffff' }}>
+                        GRAND TOTAL
+                      </TableCell>
+                      <TableCell align="center" sx={{ fontWeight: 700, backgroundColor: '#ffffff' }}>
+                        CREDIT
+                      </TableCell>
+                      <TableCell align="center" sx={{ fontWeight: 700, backgroundColor: '#ffffff' }}>
+                        10% TAX
+                      </TableCell>
+                      <TableCell align="center" sx={{ fontWeight: 700, backgroundColor: '#ffffff' }}>
+                        10% TAX AMOUNT
+                      </TableCell>
+                      <TableCell align="center" sx={{ fontWeight: 700, backgroundColor: '#ffffff' }}>
+                        TOTAL SHOPPING
                       </TableCell>
                     </TableRow>
                     <TableRow>
@@ -358,19 +592,26 @@ export default function Reports() {
                         SALE
                       </TableCell>
                       <TableCell align="center" sx={{ fontWeight: 700, backgroundColor: '#ffffff' }}>
+                        PERSONS
+                      </TableCell>
+                      <TableCell align="center" sx={{ fontWeight: 700, backgroundColor: '#ffffff' }}>
                         SALE
                       </TableCell>
                       <TableCell align="center" sx={{ fontWeight: 700, backgroundColor: '#ffffff' }}>
-                        CREDIT
+                        SALE
                       </TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell sx={{ fontWeight: 700, backgroundColor: '#ffffff' }}>
-                        {formatMonthTitle(month)}
+                      <TableCell align="center" sx={{ fontWeight: 700, backgroundColor: '#ffffff' }}>
+                        SALE
                       </TableCell>
-                      {Array.from({ length: 6 }).map((_, index) => (
-                        <TableCell key={index} sx={{ backgroundColor: '#ffffff' }} />
-                      ))}
+                      <TableCell align="center" sx={{ fontWeight: 700, backgroundColor: '#ffffff' }}>
+                        SALE
+                      </TableCell>
+                      <TableCell align="center" sx={{ fontWeight: 700, backgroundColor: '#ffffff' }}>
+                        AMOUNT
+                      </TableCell>
+                      <TableCell align="center" sx={{ fontWeight: 700, backgroundColor: '#ffffff' }}>
+                        SHOPPING
+                      </TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -400,22 +641,73 @@ export default function Reports() {
                           {row.lunchPersons ?? ''}
                         </TableCell>
                         <TableCell align="right" sx={{ backgroundColor: '#ffffff' }}>
-                          {formatCurrency(row.lunchSale)}
+                          {row.lunchSale > 0 ? formatCurrency(row.lunchSale) : ''}
                         </TableCell>
                         <TableCell align="right" sx={{ backgroundColor: '#ffffff' }}>
                           {row.dinnerPersons ?? ''}
                         </TableCell>
                         <TableCell align="right" sx={{ backgroundColor: '#ffffff' }}>
-                          {formatCurrency(row.totalSale ? row.totalSale - (row.lunchSale ?? 0) : null)}
+                          {row.dinnerSale > 0 ? formatCurrency(row.dinnerSale) : ''}
+                        </TableCell>
+                        <TableCell align="right" sx={{ backgroundColor: '#ffffff' }}>
+                          {row.totalPersons}
                         </TableCell>
                         <TableCell align="right" sx={{ backgroundColor: '#ffffff' }}>
                           {formatCurrency(row.totalSale)}
                         </TableCell>
                         <TableCell align="right" sx={{ backgroundColor: '#ffffff' }}>
+                          {formatCurrency(row.grandTotalSale)}
+                        </TableCell>
+                        <TableCell align="right" sx={{ backgroundColor: '#ffffff' }}>
                           {formatCurrency(row.totalCredit)}
+                        </TableCell>
+                        <TableCell align="right" sx={{ backgroundColor: '#ffffff' }}>
+                          {formatCurrency(row.tax10Sale)}
+                        </TableCell>
+                        <TableCell align="right" sx={{ backgroundColor: '#ffffff' }}>
+                          {formatCurrency(row.tax10Amount)}
+                        </TableCell>
+                        <TableCell align="right" sx={{ backgroundColor: '#ffffff' }}>
+                          {formatCurrency(row.totalShopping)}
                         </TableCell>
                       </TableRow>
                     ))}
+                    <TableRow>
+                      <TableCell sx={{ fontWeight: 700, backgroundColor: '#ffffff' }}>TOTAL</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 700, backgroundColor: '#ffffff' }}>
+                        {totals.lunchPersons}
+                      </TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 700, backgroundColor: '#ffffff' }}>
+                        {formatCurrency(totals.lunchSale)}
+                      </TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 700, backgroundColor: '#ffffff' }}>
+                        {totals.dinnerPersons}
+                      </TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 700, backgroundColor: '#ffffff' }}>
+                        {formatCurrency(totals.dinnerSale)}
+                      </TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 700, backgroundColor: '#ffffff' }}>
+                        {totals.totalPersons}
+                      </TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 700, backgroundColor: '#ffffff' }}>
+                        {formatCurrency(totals.totalSale)}
+                      </TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 700, backgroundColor: '#ffffff' }}>
+                        {formatCurrency(totals.grandTotalSale)}
+                      </TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 700, backgroundColor: '#ffffff' }}>
+                        {formatCurrency(totals.totalCredit)}
+                      </TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 700, backgroundColor: '#ffffff' }}>
+                        {formatCurrency(totals.tax10Sale)}
+                      </TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 700, backgroundColor: '#ffffff' }}>
+                        {formatCurrency(totals.tax10Amount)}
+                      </TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 700, backgroundColor: '#ffffff' }}>
+                        {formatCurrency(totals.totalShopping)}
+                      </TableCell>
+                    </TableRow>
                   </TableBody>
                 </Table>
               </TableContainer>
