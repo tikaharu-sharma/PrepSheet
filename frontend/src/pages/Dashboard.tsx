@@ -1,11 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import FormControl from "@mui/material/FormControl";
 import InputLabel from "@mui/material/InputLabel";
 import Select from "@mui/material/Select";
 import MenuItem from "@mui/material/MenuItem";
-import TextField from "@mui/material/TextField";
 import Alert from "@mui/material/Alert";
 import CircularProgress from "@mui/material/CircularProgress";
 import DashboardSummaryCards, {
@@ -17,6 +16,7 @@ import type { Restaurant } from "../lib/types";
 import { fetchSales, type SaleRecord } from "../lib/api";
 
 const getCurrentMonth = () => new Date().toISOString().slice(0, 7);
+const MONTH_LABELS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 const getMonthDateRange = (month: string) => {
   const [year, monthValue] = month.split("-").map(Number);
@@ -41,6 +41,18 @@ const formatMonthLabel = (month: string) => {
     year: "numeric",
     timeZone: "UTC",
   }).format(new Date(Date.UTC(year, monthValue - 1, 1)));
+};
+
+const getAvailablePeriods = (sales: SaleRecord[]) =>
+  Array.from(new Set(sales.map((sale) => sale.date.slice(0, 7)))).sort((left, right) => right.localeCompare(left));
+
+const getDefaultPeriod = (periods: string[]) => {
+  const currentMonth = getCurrentMonth();
+  if (periods.includes(currentMonth)) {
+    return currentMonth;
+  }
+
+  return periods[0] ?? "";
 };
 
 const initialSummary: DashboardSummaryData = {
@@ -70,10 +82,34 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<DashboardSummaryData>(initialSummary);
   const [trendData, setTrendData] = useState<Array<{ day: string; sales: number }>>([]);
-  const [selectedMonth, setSelectedMonth] = useState(getCurrentMonth());
+  const [allSales, setAllSales] = useState<SaleRecord[]>([]);
+  const [selectedYear, setSelectedYear] = useState("");
+  const [selectedMonthNumber, setSelectedMonthNumber] = useState("");
 
   const effectiveSelectedRestaurant =
     selectedRestaurant || (restaurants.length > 0 ? restaurants[0] : null);
+
+  const availablePeriods = useMemo(() => getAvailablePeriods(allSales), [allSales]);
+  const availableYears = useMemo(
+    () => Array.from(new Set(availablePeriods.map((period) => period.slice(0, 4)))).sort((left, right) => right.localeCompare(left)),
+    [availablePeriods]
+  );
+  const monthOptions = useMemo(
+    () =>
+      availablePeriods
+        .filter((period) => period.startsWith(`${selectedYear}-`))
+        .map((period) => {
+          const monthValue = period.slice(5, 7);
+          return {
+            value: monthValue,
+            label: MONTH_LABELS[Number(monthValue) - 1] ?? monthValue,
+          };
+        }),
+    [availablePeriods, selectedYear]
+  );
+  const yearSelectValue = availableYears.includes(selectedYear) ? selectedYear : "";
+  const monthSelectValue = monthOptions.some((option) => option.value === selectedMonthNumber) ? selectedMonthNumber : "";
+  const selectedMonth = selectedYear && selectedMonthNumber ? `${selectedYear}-${selectedMonthNumber}` : "";
 
   useEffect(() => {
     if (!selectedRestaurant && restaurants.length > 0) {
@@ -86,6 +122,7 @@ export default function Dashboard() {
 
     const loadDashboard = async () => {
       if (!effectiveSelectedRestaurant) {
+        setAllSales([]);
         setSummary(initialSummary);
         setTrendData([]);
         setLoading(false);
@@ -95,59 +132,12 @@ export default function Dashboard() {
       try {
         setLoading(true);
         setError(null);
-
-        const currentRange = getMonthDateRange(selectedMonth);
-        const previousMonth = shiftMonth(selectedMonth, -1);
-        const previousRange = getMonthDateRange(previousMonth);
-
-        const trendMonths = Array.from({ length: 7 }, (_, index) => shiftMonth(selectedMonth, -(6 - index)));
-
-        const [currentSales, previousSales, trendSalesResults] = await Promise.all([
-          fetchSales({
-            restaurantId: effectiveSelectedRestaurant.id,
-            startDate: currentRange.startDate,
-            endDate: currentRange.endDate,
-          }),
-          fetchSales({
-            restaurantId: effectiveSelectedRestaurant.id,
-            startDate: previousRange.startDate,
-            endDate: previousRange.endDate,
-          }),
-          Promise.all(
-            trendMonths.map((monthKey) => {
-              const range = getMonthDateRange(monthKey);
-              return fetchSales({
-                restaurantId: effectiveSelectedRestaurant.id,
-                startDate: range.startDate,
-                endDate: range.endDate,
-              });
-            })
-          ),
-        ]);
+        const sales = await fetchSales({
+          restaurantId: effectiveSelectedRestaurant.id,
+        });
 
         if (!isMounted) return;
-
-        const currentTotals = sumSales(currentSales);
-        const previousTotals = sumSales(previousSales);
-
-        setSummary({
-          totalSales: currentTotals.total,
-          lunchSales: currentTotals.lunch,
-          dinnerSales: currentTotals.dinner,
-          previousTotalSales: previousTotals.total,
-          previousLunchSales: previousTotals.lunch,
-          previousDinnerSales: previousTotals.dinner,
-        });
-        setTrendData(
-          trendMonths.map((monthKey, index) => ({
-            day: new Intl.DateTimeFormat("en-US", {
-              month: "short",
-              year: "2-digit",
-              timeZone: "UTC",
-            }).format(new Date(`${monthKey}-01T00:00:00Z`)),
-            sales: sumSales(trendSalesResults[index]).total,
-          }))
-        );
+        setAllSales(sales);
       } catch (err) {
         if (!isMounted) return;
         if (err instanceof Error && err.message) {
@@ -169,7 +159,70 @@ export default function Dashboard() {
     return () => {
       isMounted = false;
     };
-  }, [effectiveSelectedRestaurant, selectedMonth]);
+  }, [effectiveSelectedRestaurant]);
+
+  useEffect(() => {
+    const currentPeriod = selectedYear && selectedMonthNumber ? `${selectedYear}-${selectedMonthNumber}` : "";
+
+    if (availablePeriods.length === 0) {
+      if (selectedYear !== "") setSelectedYear("");
+      if (selectedMonthNumber !== "") setSelectedMonthNumber("");
+      return;
+    }
+
+    const nextPeriod = availablePeriods.includes(currentPeriod) ? currentPeriod : getDefaultPeriod(availablePeriods);
+    const [nextYear, nextMonthNumber] = nextPeriod.split("-");
+
+    if (nextYear !== selectedYear) {
+      setSelectedYear(nextYear);
+    }
+
+    if (nextMonthNumber !== selectedMonthNumber) {
+      setSelectedMonthNumber(nextMonthNumber);
+    }
+  }, [availablePeriods, selectedMonthNumber, selectedYear]);
+
+  useEffect(() => {
+    if (!selectedMonth) {
+      setSummary(initialSummary);
+      setTrendData([]);
+      return;
+    }
+
+    const currentRange = getMonthDateRange(selectedMonth);
+    const previousMonth = shiftMonth(selectedMonth, -1);
+    const previousRange = getMonthDateRange(previousMonth);
+    const currentSales = allSales.filter((sale) => sale.date >= currentRange.startDate && sale.date <= currentRange.endDate);
+    const previousSales = allSales.filter((sale) => sale.date >= previousRange.startDate && sale.date <= previousRange.endDate);
+    const trendMonths = Array.from({ length: 7 }, (_, index) => shiftMonth(selectedMonth, -(6 - index)));
+
+    const currentTotals = sumSales(currentSales);
+    const previousTotals = sumSales(previousSales);
+
+    setSummary({
+      totalSales: currentTotals.total,
+      lunchSales: currentTotals.lunch,
+      dinnerSales: currentTotals.dinner,
+      previousTotalSales: previousTotals.total,
+      previousLunchSales: previousTotals.lunch,
+      previousDinnerSales: previousTotals.dinner,
+    });
+    setTrendData(
+      trendMonths.map((monthKey) => {
+        const range = getMonthDateRange(monthKey);
+        const monthSales = allSales.filter((sale) => sale.date >= range.startDate && sale.date <= range.endDate);
+
+        return {
+          day: new Intl.DateTimeFormat("en-US", {
+            month: "short",
+            year: "2-digit",
+            timeZone: "UTC",
+          }).format(new Date(`${monthKey}-01T00:00:00Z`)),
+          sales: sumSales(monthSales).total,
+        };
+      })
+    );
+  }, [allSales, selectedMonth]);
 
   const handleRestaurantChange = (id: number) => {
     const found = restaurants.find((r) => r.id === id) || null;
@@ -184,14 +237,49 @@ export default function Dashboard() {
         </Typography>
 
         <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
-          <TextField
-            label="Month"
-            type="month"
-            value={selectedMonth}
-            onChange={(event) => setSelectedMonth(event.target.value)}
-            size="small"
-            InputLabelProps={{ shrink: true }}
-          />
+          <FormControl size="small" sx={{ minWidth: 120 }}>
+            <InputLabel id="dashboard-year-select-label">Year</InputLabel>
+            <Select
+              labelId="dashboard-year-select-label"
+              id="dashboard-year-select"
+              value={yearSelectValue}
+              label="Year"
+              onChange={(event) => {
+                const nextYear = String(event.target.value);
+                const nextMonthOptions = availablePeriods
+                  .filter((period) => period.startsWith(`${nextYear}-`))
+                  .map((period) => period.slice(5, 7));
+
+                setSelectedYear(nextYear);
+                setSelectedMonthNumber(nextMonthOptions[0] ?? "");
+              }}
+              disabled={availableYears.length === 0}
+            >
+              {availableYears.map((year) => (
+                <MenuItem key={year} value={year}>
+                  {year}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+
+          <FormControl size="small" sx={{ minWidth: 160 }}>
+            <InputLabel id="dashboard-month-select-label">Month</InputLabel>
+            <Select
+              labelId="dashboard-month-select-label"
+              id="dashboard-month-select"
+              value={monthSelectValue}
+              label="Month"
+              onChange={(event) => setSelectedMonthNumber(String(event.target.value))}
+              disabled={monthOptions.length === 0}
+            >
+              {monthOptions.map((option) => (
+                <MenuItem key={option.value} value={option.value}>
+                  {option.label}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
 
           {restaurants.length > 0 && (
             <FormControl size="small" sx={{ minWidth: 260 }}>
@@ -220,6 +308,8 @@ export default function Dashboard() {
         </Box>
       ) : error ? (
         <Alert severity="error">{error}</Alert>
+      ) : !selectedMonth ? (
+        <Alert severity="info">No dashboard data is available for the selected restaurant yet.</Alert>
       ) : (
         <>
           <DashboardSummaryCards

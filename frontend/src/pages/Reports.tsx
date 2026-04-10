@@ -23,6 +23,7 @@ import { fetchSales, type SaleRecord } from '../lib/api'
 import { useRestaurant } from '../context/useRestaurant'
 
 const getCurrentMonth = () => new Date().toISOString().slice(0, 7)
+const MONTH_LABELS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 
 const getMonthDateRange = (month: string) => {
   const [year, monthValue] = month.split('-').map(Number)
@@ -71,11 +72,24 @@ interface ReportRow {
   totalCredit: number | null
 }
 
+const getAvailablePeriods = (sales: SaleRecord[]) =>
+  Array.from(new Set(sales.map((sale) => sale.date.slice(0, 7)))).sort((left, right) => right.localeCompare(left))
+
+const getDefaultPeriod = (periods: string[]) => {
+  const currentMonth = getCurrentMonth()
+  if (periods.includes(currentMonth)) {
+    return currentMonth
+  }
+
+  return periods[0] ?? ''
+}
+
 export default function Reports() {
   const { restaurants } = useRestaurant()
-  const [month, setMonth] = useState(getCurrentMonth())
   const [restaurantId, setRestaurantId] = useState<number | ''>('')
-  const [sales, setSales] = useState<SaleRecord[]>([])
+  const [allSales, setAllSales] = useState<SaleRecord[]>([])
+  const [selectedYear, setSelectedYear] = useState('')
+  const [selectedMonthNumber, setSelectedMonthNumber] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedRow, setSelectedRow] = useState<ReportRow | null>(null)
@@ -91,7 +105,7 @@ export default function Reports() {
 
     const loadReports = async () => {
       if (restaurantId === '') {
-        setSales([])
+        setAllSales([])
         setLoading(false)
         return
       }
@@ -100,15 +114,12 @@ export default function Reports() {
         setLoading(true)
         setError(null)
 
-        const { startDate, endDate } = getMonthDateRange(month)
         const salesData = await fetchSales({
-          startDate,
-          endDate,
           restaurantId,
         })
 
         if (!isMounted) return
-        setSales(salesData)
+        setAllSales(salesData)
       } catch (err) {
         if (!isMounted) return
         if (err instanceof Error && err.message) {
@@ -130,13 +141,64 @@ export default function Reports() {
     return () => {
       isMounted = false
     }
-  }, [month, restaurantId])
+  }, [restaurantId])
 
   const selectedRestaurant = restaurants.find((restaurant) => restaurant.id === restaurantId) ?? null
+  const availablePeriods = useMemo(() => getAvailablePeriods(allSales), [allSales])
+  const availableYears = useMemo(
+    () => Array.from(new Set(availablePeriods.map((period) => period.slice(0, 4)))).sort((left, right) => right.localeCompare(left)),
+    [availablePeriods],
+  )
+  const monthOptions = useMemo(
+    () =>
+      availablePeriods
+        .filter((period) => period.startsWith(`${selectedYear}-`))
+        .map((period) => {
+          const monthValue = period.slice(5, 7)
+          return {
+            value: monthValue,
+            label: MONTH_LABELS[Number(monthValue) - 1] ?? monthValue,
+          }
+        }),
+    [availablePeriods, selectedYear],
+  )
+  const yearSelectValue = availableYears.includes(selectedYear) ? selectedYear : ''
+  const monthSelectValue = monthOptions.some((option) => option.value === selectedMonthNumber) ? selectedMonthNumber : ''
+  const month = selectedYear && selectedMonthNumber ? `${selectedYear}-${selectedMonthNumber}` : ''
+
+  useEffect(() => {
+    const currentPeriod = selectedYear && selectedMonthNumber ? `${selectedYear}-${selectedMonthNumber}` : ''
+
+    if (availablePeriods.length === 0) {
+      if (selectedYear !== '') setSelectedYear('')
+      if (selectedMonthNumber !== '') setSelectedMonthNumber('')
+      return
+    }
+
+    const nextPeriod = availablePeriods.includes(currentPeriod) ? currentPeriod : getDefaultPeriod(availablePeriods)
+    const [nextYear, nextMonthNumber] = nextPeriod.split('-')
+
+    if (nextYear !== selectedYear) {
+      setSelectedYear(nextYear)
+    }
+
+    if (nextMonthNumber !== selectedMonthNumber) {
+      setSelectedMonthNumber(nextMonthNumber)
+    }
+  }, [availablePeriods, selectedMonthNumber, selectedYear])
+
+  const filteredSales = useMemo(
+    () => (month ? allSales.filter((sale) => sale.date.startsWith(`${month}-`)) : []),
+    [allSales, month],
+  )
 
   const rows = useMemo<ReportRow[]>(() => {
+    if (!month) {
+      return []
+    }
+
     const { daysInMonth } = getMonthDateRange(month)
-    const salesByDate = new Map(sales.map((sale) => [sale.date, sale]))
+    const salesByDate = new Map(filteredSales.map((sale) => [sale.date, sale]))
     const [year, monthValue] = month.split('-').map(Number)
 
     return Array.from({ length: daysInMonth }, (_, index) => {
@@ -156,7 +218,7 @@ export default function Reports() {
         totalCredit: sale?.credit_sale ?? null,
       }
     })
-  }, [month, sales])
+  }, [filteredSales, month])
 
   return (
     <Container maxWidth="xl" sx={{ py: 4 }}>
@@ -173,12 +235,41 @@ export default function Reports() {
 
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
             <TextField
+              select
+              label="Year"
+              value={yearSelectValue}
+              onChange={(e) => {
+                const nextYear = e.target.value
+                const nextMonthOptions = availablePeriods
+                  .filter((period) => period.startsWith(`${nextYear}-`))
+                  .map((period) => period.slice(5, 7))
+
+                setSelectedYear(nextYear)
+                setSelectedMonthNumber(nextMonthOptions[0] ?? '')
+              }}
+              sx={{ minWidth: 120 }}
+              disabled={availableYears.length === 0}
+            >
+              {availableYears.map((year) => (
+                <MenuItem key={year} value={year}>
+                  {year}
+                </MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              select
               label="Month"
-              type="month"
-              value={month}
-              onChange={(e) => setMonth(e.target.value)}
-              InputLabelProps={{ shrink: true }}
-            />
+              value={monthSelectValue}
+              onChange={(e) => setSelectedMonthNumber(e.target.value)}
+              sx={{ minWidth: 140 }}
+              disabled={monthOptions.length === 0}
+            >
+              {monthOptions.map((option) => (
+                <MenuItem key={option.value} value={option.value}>
+                  {option.label}
+                </MenuItem>
+              ))}
+            </TextField>
             <TextField
               select
               label="Restaurant"
@@ -201,6 +292,8 @@ export default function Reports() {
           </Box>
         ) : error ? (
           <Alert severity="error">{error}</Alert>
+        ) : !month ? (
+          <Alert severity="info">No report data is available for the selected restaurant yet.</Alert>
         ) : (
           <Paper elevation={4} sx={{ p: 3, overflow: 'hidden' }}>
             <Stack spacing={2}>
