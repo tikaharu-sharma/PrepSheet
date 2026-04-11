@@ -1,4 +1,4 @@
-import { clearAuthSession, getStoredUser, getToken, isLoggedIn, setAuthSession } from './auth'
+import { clearAuthSession, getStoredUser, getToken, isLoggedIn, setAuthSession } from '../lib/auth'
 
 describe('auth helpers', () => {
   beforeEach(() => {

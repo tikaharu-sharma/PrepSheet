@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { Users } from './Users'
+import { Users } from '../pages/Users'
 import {
   createEmployee,
   deleteEmployee,

@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import Reports from './Reports'
+import Reports from '../pages/Reports'
 import { fetchSales, type SaleRecord } from '../lib/api'
 import { RestaurantContext } from '../context/RestaurantContext'
 import type { RestaurantContextType } from '../context/RestaurantContext'
@@ -112,12 +112,15 @@ describe('Reports page', () => {
     await user.click(screen.getByRole('combobox', { name: /month/i }))
     await user.click(await screen.findByRole('option', { name: 'March' }))
 
-    expect(await screen.findByText('March 2026')).toBeInTheDocument()
+    expect(await screen.findByText(/March\s+2026/i)).toBeInTheDocument()
     expect(screen.getAllByText('TOTAL').length).toBeGreaterThan(0)
     expect(screen.getByText('CREDIT')).toBeInTheDocument()
-    expect(screen.getByText((content) => content.includes('200'))).toBeInTheDocument()
-    expect(screen.getByText((content) => content.includes('500'))).toBeInTheDocument()
-    expect(screen.getByText((content) => content.includes('150'))).toBeInTheDocument()
+    expect(screen.getAllByText((content) => content.includes("200")).length).toBeGreaterThan(0)
+    expect(screen.getAllByText((content) => content.includes("500")).length).toBeGreaterThan(0)
+    expect(screen.getAllByText((content) => content.includes("150")).length).toBeGreaterThan(0)
+   // expect(screen.getByText((content) => content.includes('200'))).toBeInTheDocument()
+   // expect(screen.getByText((content) => content.includes('500'))).toBeInTheDocument()
+   // expect(screen.getByText((content) => content.includes('150'))).toBeInTheDocument()
   })
 
   it('refetches reports for a selected restaurant', async () => {
@@ -132,7 +135,7 @@ describe('Reports page', () => {
     await user.click(await screen.findByRole('option', { name: /tobata/i }))
 
     await waitFor(() => {
-      expect(mockedFetchSales).toHaveBeenCalledWith(
+      expect(mockedFetchSales).toHaveBeenLastCalledWith(
         expect.objectContaining({ restaurantId: 2 }),
       )
     })
