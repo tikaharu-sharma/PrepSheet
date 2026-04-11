@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import Login from './Login'
+import Login from '../pages/Login'
 import { loginUser } from '../lib/api'
 import { setAuthSession } from '../lib/auth'
 

@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import Restaurants from './Restaurants'
+import Restaurants from '../pages/Restaurants'
 import { RestaurantContext } from '../context/RestaurantContext'
 import type { RestaurantContextType } from '../context/RestaurantContext'
 

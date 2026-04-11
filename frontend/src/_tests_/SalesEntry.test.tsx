@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import SalesEntry from './SalesEntry'
+import SalesEntry from '../pages/SalesEntry'
 import { submitSale } from '../lib/api'
 import { RestaurantContext } from '../context/RestaurantContext'
 import type { RestaurantContextType } from '../context/RestaurantContext'

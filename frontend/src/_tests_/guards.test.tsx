@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import RequireAuth from './RequireAuth'
-import RequireRole from './RequireRole'
+import RequireAuth from '../features/RequireAuth'
+import RequireRole from '../features/RequireRole'
 import { AuthContext } from '../context/AuthContext'
 import type { User } from '../context/AuthTypes'
 
