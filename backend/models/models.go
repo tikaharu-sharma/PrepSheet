@@ -127,6 +127,22 @@ type SaleRequest struct {
 	Note            string             `json:"note"`
 }
 
+// UpdateSaleRequest is the payload for updating an existing sale entry.
+type UpdateSaleRequest struct {
+	ID              int                `json:"id"`
+	Date            string             `json:"date"`
+	RestaurantID    int                `json:"restaurant_id,omitempty"`
+	Restaurant      string             `json:"restaurant"`
+	LunchHeadCount  int                `json:"lunch_head_count"`
+	LunchSale       float64            `json:"lunch_sale"`
+	DinnerHeadCount int                `json:"dinner_head_count"`
+	DinnerSale      float64            `json:"dinner_sale"`
+	CreditSale      float64            `json:"credit_sale"`
+	RejiMoney       float64            `json:"reji_money"`
+	Expenditures    []ExpenditureInput `json:"expenditures"`
+	Note            string             `json:"note"`
+}
+
 // ExpenditureInput is the payload for a single expenditure in a sale request.
 type ExpenditureInput struct {
 	Title  string  `json:"title"`

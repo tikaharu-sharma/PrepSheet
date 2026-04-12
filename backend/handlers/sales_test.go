@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"testing"
 
+	"prepsheet-backend/database"
 	"prepsheet-backend/models"
 )
 
@@ -16,19 +17,19 @@ func intToStr(n int) string { return strconv.Itoa(n) }
 
 // withEmployeeContext adds employee auth context values to a request.
 func withEmployeeContext(r *http.Request, userID int) *http.Request {
-	ctx := context.WithValue(r.Context(), "user_id", userID)  //nolint:staticcheck
-	ctx = context.WithValue(ctx, "name", "Test Employee")     //nolint:staticcheck
-	ctx = context.WithValue(ctx, "email", "emp@example.com")  //nolint:staticcheck
-	ctx = context.WithValue(ctx, "role", "employee")           //nolint:staticcheck
+	ctx := context.WithValue(r.Context(), "user_id", userID) //nolint:staticcheck
+	ctx = context.WithValue(ctx, "name", "Test Employee")    //nolint:staticcheck
+	ctx = context.WithValue(ctx, "email", "emp@example.com") //nolint:staticcheck
+	ctx = context.WithValue(ctx, "role", "employee")         //nolint:staticcheck
 	return r.WithContext(ctx)
 }
 
 // withManagerContext adds manager auth context values to a request.
 func withManagerContext(r *http.Request, userID int) *http.Request {
-	ctx := context.WithValue(r.Context(), "user_id", userID)   //nolint:staticcheck
-	ctx = context.WithValue(ctx, "name", "Test Manager")       //nolint:staticcheck
-	ctx = context.WithValue(ctx, "email", "mgr@example.com")   //nolint:staticcheck
-	ctx = context.WithValue(ctx, "role", "manager")             //nolint:staticcheck
+	ctx := context.WithValue(r.Context(), "user_id", userID) //nolint:staticcheck
+	ctx = context.WithValue(ctx, "name", "Test Manager")     //nolint:staticcheck
+	ctx = context.WithValue(ctx, "email", "mgr@example.com") //nolint:staticcheck
+	ctx = context.WithValue(ctx, "role", "manager")          //nolint:staticcheck
 	return r.WithContext(ctx)
 }
 
@@ -48,11 +49,50 @@ func createTestEmployee(t *testing.T) int {
 	return int(resp["user_id"].(float64))
 }
 
+func createTestManager(t *testing.T) int {
+	t.Helper()
+	body := `{"name":"Sale Mgr","email":"salmgr@example.com","password":"pass","role":"manager"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/signup", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	Signup(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("failed to create test manager: %d %s", rr.Code, rr.Body.String())
+	}
+	var resp map[string]interface{}
+	json.NewDecoder(rr.Body).Decode(&resp)
+	return int(resp["user_id"].(float64))
+}
+
+func createManagedRestaurant(t *testing.T, managerID int, name string) int {
+	t.Helper()
+	result, err := database.DB.Exec("INSERT INTO restaurants (name, manager_id) VALUES (?, ?)", name, managerID)
+	if err != nil {
+		t.Fatalf("failed to create restaurant: %v", err)
+	}
+	id, _ := result.LastInsertId()
+	return int(id)
+}
+
+func assignEmployeeToRestaurant(t *testing.T, employeeID, restaurantID int) {
+	t.Helper()
+	if _, err := database.DB.Exec(
+		"INSERT INTO assignments (restaurant_id, employee_id, status) VALUES (?, ?, 'active')",
+		restaurantID,
+		employeeID,
+	); err != nil {
+		t.Fatalf("failed to assign employee: %v", err)
+	}
+}
+
 func TestAddSale_Success(t *testing.T) {
 	setupTestDB()
 	defer teardownTestDB()
 
+	managerID := createTestManager(t)
 	empID := createTestEmployee(t)
+	restaurantID := createManagedRestaurant(t, managerID, "Pizza Palace")
+	assignEmployeeToRestaurant(t, empID, restaurantID)
 
 	saleBody := `{
 		"date":"2025-01-15",
@@ -125,6 +165,9 @@ func TestAddSale_WithMultipleExpenditures(t *testing.T) {
 	defer teardownTestDB()
 
 	empID := createTestEmployee(t)
+	managerID := createTestManager(t)
+	restaurantID := createManagedRestaurant(t, managerID, "Burger Barn")
+	assignEmployeeToRestaurant(t, empID, restaurantID)
 
 	saleBody := `{
 		"date":"2025-01-16",
@@ -173,7 +216,10 @@ func TestGetSales_Success(t *testing.T) {
 	setupTestDB()
 	defer teardownTestDB()
 
+	managerID := createTestManager(t)
 	empID := createTestEmployee(t)
+	restaurantID := createManagedRestaurant(t, managerID, "Sushi Spot")
+	assignEmployeeToRestaurant(t, empID, restaurantID)
 
 	// Add a sale
 	saleBody := `{"date":"2025-01-15","restaurant":"Sushi Spot","lunch_head_count":20,"lunch_sale":200,"dinner_head_count":30,"dinner_sale":350,"credit_sale":10,"reji_money":500,"expenditures":[],"note":""}`
@@ -184,7 +230,7 @@ func TestGetSales_Success(t *testing.T) {
 
 	// Get all sales as manager
 	req2 := httptest.NewRequest(http.MethodGet, "/api/sales/all", nil)
-	req2 = withManagerContext(req2, 99)
+	req2 = withManagerContext(req2, managerID)
 	rr := httptest.NewRecorder()
 	GetSales(rr, req2)
 
@@ -206,7 +252,10 @@ func TestGetSales_WithDateFilter(t *testing.T) {
 	setupTestDB()
 	defer teardownTestDB()
 
+	managerID := createTestManager(t)
 	empID := createTestEmployee(t)
+	restaurantID := createManagedRestaurant(t, managerID, "Resto")
+	assignEmployeeToRestaurant(t, empID, restaurantID)
 
 	// Add sales on different dates
 	for _, date := range []string{"2025-01-10", "2025-02-15", "2025-03-20"} {
@@ -219,7 +268,7 @@ func TestGetSales_WithDateFilter(t *testing.T) {
 
 	// Filter by date range
 	req := httptest.NewRequest(http.MethodGet, "/api/sales/all?start_date=2025-02-01&end_date=2025-02-28", nil)
-	req = withManagerContext(req, 99)
+	req = withManagerContext(req, managerID)
 	rr := httptest.NewRecorder()
 	GetSales(rr, req)
 
@@ -238,7 +287,10 @@ func TestGetMySales_Success(t *testing.T) {
 	setupTestDB()
 	defer teardownTestDB()
 
+	managerID := createTestManager(t)
 	empID := createTestEmployee(t)
+	restaurantID := createManagedRestaurant(t, managerID, "My Place")
+	assignEmployeeToRestaurant(t, empID, restaurantID)
 
 	// Add a sale
 	body := `{"date":"2025-01-20","restaurant":"My Place","lunch_head_count":5,"lunch_sale":50,"dinner_head_count":10,"dinner_sale":120,"credit_sale":0,"reji_money":170,"expenditures":[],"note":"test"}`
@@ -271,7 +323,10 @@ func TestGetMySales_Empty(t *testing.T) {
 	setupTestDB()
 	defer teardownTestDB()
 
+	managerID := createTestManager(t)
 	empID := createTestEmployee(t)
+	restaurantID := createManagedRestaurant(t, managerID, "Resto")
+	assignEmployeeToRestaurant(t, empID, restaurantID)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/sales/my", nil)
 	req = withEmployeeContext(req, empID)
@@ -293,11 +348,14 @@ func TestGetMySales_WithDateFilter(t *testing.T) {
 	setupTestDB()
 	defer teardownTestDB()
 
+	managerID := createTestManager(t)
 	empID := createTestEmployee(t)
+	restaurantID := createManagedRestaurant(t, managerID, "Report Resto")
+	assignEmployeeToRestaurant(t, empID, restaurantID)
 
 	// Add sales on different dates
 	for _, date := range []string{"2025-01-10", "2025-02-15", "2025-03-20"} {
-		body := `{"date":"` + date + `","restaurant":"Resto","lunch_head_count":10,"lunch_sale":100,"dinner_head_count":10,"dinner_sale":100,"credit_sale":0,"reji_money":200,"expenditures":[],"note":""}`
+		body := `{"date":"` + date + `","restaurant":"Report Resto","lunch_head_count":10,"lunch_sale":100,"dinner_head_count":10,"dinner_sale":100,"credit_sale":0,"reji_money":200,"expenditures":[],"note":""}`
 		req := httptest.NewRequest(http.MethodPost, "/api/sales", bytes.NewBufferString(body))
 		req.Header.Set("Content-Type", "application/json")
 		req = withEmployeeContext(req, empID)
@@ -339,11 +397,14 @@ func TestGetMonthlyReport_WithData(t *testing.T) {
 	setupTestDB()
 	defer teardownTestDB()
 
+	managerID := createTestManager(t)
 	empID := createTestEmployee(t)
+	restaurantID := createManagedRestaurant(t, managerID, "Report Resto")
+	assignEmployeeToRestaurant(t, empID, restaurantID)
 
 	// Add sales in same month
-	for i := 0; i < 3; i++ {
-		body := `{"date":"2025-03-15","restaurant":"Report Resto","lunch_head_count":10,"lunch_sale":100,"dinner_head_count":20,"dinner_sale":200,"credit_sale":0,"reji_money":300,"expenditures":[],"note":""}`
+	for _, date := range []string{"2025-03-15", "2025-03-16", "2025-03-17"} {
+		body := `{"date":"` + date + `","restaurant":"Report Resto","lunch_head_count":10,"lunch_sale":100,"dinner_head_count":20,"dinner_sale":200,"credit_sale":0,"reji_money":300,"expenditures":[],"note":""}`
 		req := httptest.NewRequest(http.MethodPost, "/api/sales", bytes.NewBufferString(body))
 		req.Header.Set("Content-Type", "application/json")
 		req = withEmployeeContext(req, empID)
@@ -351,7 +412,7 @@ func TestGetMonthlyReport_WithData(t *testing.T) {
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/api/reports/monthly?month=2025-03", nil)
-	req = withManagerContext(req, 99)
+	req = withManagerContext(req, managerID)
 	rr := httptest.NewRecorder()
 	GetMonthlyReport(rr, req)
 
@@ -380,7 +441,10 @@ func TestGetSales_WithExpenditures(t *testing.T) {
 	setupTestDB()
 	defer teardownTestDB()
 
+	managerID := createTestManager(t)
 	empID := createTestEmployee(t)
+	restaurantID := createManagedRestaurant(t, managerID, "Exp Place")
+	assignEmployeeToRestaurant(t, empID, restaurantID)
 
 	saleBody := `{"date":"2025-04-01","restaurant":"Exp Place","lunch_head_count":10,"lunch_sale":100,"dinner_head_count":20,"dinner_sale":200,"credit_sale":0,"reji_money":250,"expenditures":[{"title":"Gas","amount":25},{"title":"Paper","amount":10}],"note":""}`
 	req := httptest.NewRequest(http.MethodPost, "/api/sales", bytes.NewBufferString(saleBody))
@@ -390,7 +454,7 @@ func TestGetSales_WithExpenditures(t *testing.T) {
 
 	// Get all sales as manager and verify expenditures loaded
 	req2 := httptest.NewRequest(http.MethodGet, "/api/sales/all", nil)
-	req2 = withManagerContext(req2, 99)
+	req2 = withManagerContext(req2, managerID)
 	rr := httptest.NewRecorder()
 	GetSales(rr, req2)
 
@@ -409,7 +473,12 @@ func TestUpdateSale_Success(t *testing.T) {
 	setupTestDB()
 	defer teardownTestDB()
 
+	managerID := createTestManager(t)
 	empID := createTestEmployee(t)
+	oldRestaurantID := createManagedRestaurant(t, managerID, "Old Place")
+	newRestaurantID := createManagedRestaurant(t, managerID, "New Place")
+	assignEmployeeToRestaurant(t, empID, oldRestaurantID)
+	assignEmployeeToRestaurant(t, empID, newRestaurantID)
 
 	// Add a sale
 	saleBody := `{"date":"2025-01-15","restaurant":"Old Place","lunch_head_count":10,"lunch_sale":100,"dinner_head_count":20,"dinner_sale":200,"credit_sale":0,"reji_money":300,"expenditures":[{"title":"Gas","amount":25}],"note":"original"}`
@@ -464,7 +533,10 @@ func TestUpdateSale_NotOwner(t *testing.T) {
 	setupTestDB()
 	defer teardownTestDB()
 
+	managerID := createTestManager(t)
 	empID := createTestEmployee(t)
+	restaurantID := createManagedRestaurant(t, managerID, "Place")
+	assignEmployeeToRestaurant(t, empID, restaurantID)
 
 	// Add a sale as empID
 	saleBody := `{"date":"2025-01-15","restaurant":"Place","lunch_head_count":10,"lunch_sale":100,"dinner_head_count":20,"dinner_sale":200,"credit_sale":0,"reji_money":300,"expenditures":[],"note":""}`
@@ -511,7 +583,10 @@ func TestDeleteSale_Success(t *testing.T) {
 	setupTestDB()
 	defer teardownTestDB()
 
+	managerID := createTestManager(t)
 	empID := createTestEmployee(t)
+	restaurantID := createManagedRestaurant(t, managerID, "Del Place")
+	assignEmployeeToRestaurant(t, empID, restaurantID)
 
 	// Add a sale
 	saleBody := `{"date":"2025-01-15","restaurant":"Del Place","lunch_head_count":10,"lunch_sale":100,"dinner_head_count":20,"dinner_sale":200,"credit_sale":0,"reji_money":300,"expenditures":[{"title":"Gas","amount":25}],"note":""}`
@@ -552,7 +627,10 @@ func TestDeleteSale_NotOwner(t *testing.T) {
 	setupTestDB()
 	defer teardownTestDB()
 
+	managerID := createTestManager(t)
 	empID := createTestEmployee(t)
+	restaurantID := createManagedRestaurant(t, managerID, "Place")
+	assignEmployeeToRestaurant(t, empID, restaurantID)
 
 	// Add a sale
 	saleBody := `{"date":"2025-01-15","restaurant":"Place","lunch_head_count":10,"lunch_sale":100,"dinner_head_count":20,"dinner_sale":200,"credit_sale":0,"reji_money":300,"expenditures":[],"note":""}`
@@ -581,7 +659,10 @@ func TestDeleteSale_ManagerCanDeleteAny(t *testing.T) {
 	setupTestDB()
 	defer teardownTestDB()
 
+	managerID := createTestManager(t)
 	empID := createTestEmployee(t)
+	restaurantID := createManagedRestaurant(t, managerID, "Place")
+	assignEmployeeToRestaurant(t, empID, restaurantID)
 
 	// Add a sale as employee
 	saleBody := `{"date":"2025-01-15","restaurant":"Place","lunch_head_count":10,"lunch_sale":100,"dinner_head_count":20,"dinner_sale":200,"credit_sale":0,"reji_money":300,"expenditures":[],"note":""}`
@@ -597,7 +678,7 @@ func TestDeleteSale_ManagerCanDeleteAny(t *testing.T) {
 
 	// Manager deletes it
 	req2 := httptest.NewRequest(http.MethodDelete, "/api/sales/delete?id="+intToStr(saleID), nil)
-	req2 = withManagerContext(req2, 99)
+	req2 = withManagerContext(req2, managerID)
 	rr2 := httptest.NewRecorder()
 	DeleteSale(rr2, req2)
 
