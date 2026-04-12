@@ -7,19 +7,8 @@ type User struct {
 	Email     string `json:"email"`
 	Password  string `json:"password,omitempty"`
 	Role      string `json:"role"`
-	ManagerID *int   `json:"manager_id,omitempty"`
 	Status    string `json:"status"`
 	CreatedAt string `json:"created_at"`
-}
-
-// EmployeeWithRestaurants includes employee info and their assigned restaurants
-type EmployeeWithRestaurants struct {
-	ID          int          `json:"id"`
-	Name        string       `json:"name"`
-	Email       string       `json:"email"`
-	Status      string       `json:"status"`
-	Restaurants []Restaurant `json:"restaurants"`
-	CreatedAt   string       `json:"created_at"`
 }
 
 // SignupRequest is the payload for user registration.
@@ -28,40 +17,6 @@ type SignupRequest struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
 	Role     string `json:"role"`
-}
-
-// CreateEmployeeRequest is the payload for creating a new employee under a manager
-type CreateEmployeeRequest struct {
-	Name        string `json:"name"`
-	Email       string `json:"email"`
-	Password    string `json:"password"`
-	Status      string `json:"status"`
-	Restaurants []int  `json:"restaurants"`
-}
-
-// UpdateEmployeeStatusRequest is the payload for updating employee status
-type UpdateEmployeeStatusRequest struct {
-	UserID int    `json:"user_id"`
-	Status string `json:"status"`
-}
-
-// UpdateEmployeeRequest is the payload for updating employee profile details.
-type UpdateEmployeeRequest struct {
-	UserID   int    `json:"user_id"`
-	Name     string `json:"name"`
-	Email    string `json:"email"`
-	Password string `json:"password,omitempty"`
-}
-
-// VerifyPasswordRequest is the payload for checking the current password.
-type VerifyPasswordRequest struct {
-	CurrentPassword string `json:"current_password"`
-}
-
-// ChangePasswordRequest is the payload for updating the authenticated user's password.
-type ChangePasswordRequest struct {
-	CurrentPassword string `json:"current_password"`
-	NewPassword     string `json:"new_password"`
 }
 
 // LoginRequest is the payload for user login.
@@ -115,7 +70,6 @@ type Sale struct {
 // SaleRequest is the payload for adding a new sale entry.
 type SaleRequest struct {
 	Date            string             `json:"date"`
-	RestaurantID    int                `json:"restaurant_id,omitempty"`
 	Restaurant      string             `json:"restaurant"`
 	LunchHeadCount  int                `json:"lunch_head_count"`
 	LunchSale       float64            `json:"lunch_sale"`
@@ -131,6 +85,21 @@ type SaleRequest struct {
 type ExpenditureInput struct {
 	Title  string  `json:"title"`
 	Amount float64 `json:"amount"`
+}
+
+// UpdateSaleRequest is the payload for updating an existing sale entry.
+type UpdateSaleRequest struct {
+	ID              int                `json:"id"`
+	Date            string             `json:"date"`
+	Restaurant      string             `json:"restaurant"`
+	LunchHeadCount  int                `json:"lunch_head_count"`
+	LunchSale       float64            `json:"lunch_sale"`
+	DinnerHeadCount int                `json:"dinner_head_count"`
+	DinnerSale      float64            `json:"dinner_sale"`
+	CreditSale      float64            `json:"credit_sale"`
+	RejiMoney       float64            `json:"reji_money"`
+	Expenditures    []ExpenditureInput `json:"expenditures"`
+	Note            string             `json:"note"`
 }
 
 // MonthlySalesReport holds aggregated monthly data.
