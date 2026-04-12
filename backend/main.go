@@ -30,18 +30,15 @@ func main() {
 	mux.HandleFunc("/api/sales", middleware.AuthMiddleware(handlers.AddSale))
 	mux.HandleFunc("/api/sales/my", middleware.AuthMiddleware(handlers.GetMySales))
 	mux.HandleFunc("/api/sales/all", middleware.AuthMiddleware(handlers.GetSales))
+	mux.HandleFunc("/api/sales/update", middleware.AuthMiddleware(handlers.UpdateSale))
+	mux.HandleFunc("/api/sales/delete", middleware.AuthMiddleware(handlers.DeleteSale))
 
 	// ─── Reports ────────────────────────────────────────────────────────
 	mux.HandleFunc("/api/reports/monthly", middleware.AuthMiddleware(handlers.GetMonthlyReport))
 
 	// ─── User management routes ─────────────────────────────────────────
 	mux.HandleFunc("/api/users", middleware.AuthMiddleware(handlers.GetUsers))
-	mux.HandleFunc("/api/users/create", middleware.AuthMiddleware(handlers.CreateEmployee))
-	mux.HandleFunc("/api/users/update", middleware.AuthMiddleware(handlers.UpdateEmployee))
-	mux.HandleFunc("/api/users/delete", middleware.AuthMiddleware(handlers.DeleteEmployee))
 	mux.HandleFunc("/api/users/status", middleware.AuthMiddleware(handlers.UpdateUserStatus))
-	mux.HandleFunc("/api/users/verify-password", middleware.AuthMiddleware(handlers.VerifyPassword))
-	mux.HandleFunc("/api/users/change-password", middleware.AuthMiddleware(handlers.ChangePassword))
 
 	// ─── Assignment routes ──────────────────────────────────────────────
 	mux.HandleFunc("/api/assignments", middleware.AuthMiddleware(handlers.GetAssignments))
