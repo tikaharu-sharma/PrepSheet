@@ -104,6 +104,102 @@ func TestAddRestaurant_Duplicate(t *testing.T) {
 	}
 }
 
+func TestUpdateRestaurant_Success(t *testing.T) {
+	setupTestDB()
+	defer teardownTestDB()
+
+	database.DB.Exec("INSERT INTO restaurants (name) VALUES (?)", "Old Name")
+
+	body := `{"id":1,"name":"New Name"}`
+	req := httptest.NewRequest(http.MethodPut, "/api/restaurants/update", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	UpdateRestaurant(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	var restaurant models.Restaurant
+	json.NewDecoder(rr.Body).Decode(&restaurant)
+	if restaurant.Name != "New Name" {
+		t.Fatalf("expected name 'New Name', got '%s'", restaurant.Name)
+	}
+
+	// Verify persisted
+	req2 := httptest.NewRequest(http.MethodGet, "/api/restaurants", nil)
+	rr2 := httptest.NewRecorder()
+	GetRestaurants(rr2, req2)
+
+	var restaurants []models.Restaurant
+	json.NewDecoder(rr2.Body).Decode(&restaurants)
+	if len(restaurants) != 1 || restaurants[0].Name != "New Name" {
+		t.Fatalf("expected renamed restaurant, got %+v", restaurants)
+	}
+}
+
+func TestUpdateRestaurant_MethodNotAllowed(t *testing.T) {
+	setupTestDB()
+	defer teardownTestDB()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/restaurants/update", nil)
+	rr := httptest.NewRecorder()
+	UpdateRestaurant(rr, req)
+
+	if rr.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected 405, got %d", rr.Code)
+	}
+}
+
+func TestUpdateRestaurant_MissingFields(t *testing.T) {
+	setupTestDB()
+	defer teardownTestDB()
+
+	body := `{"id":0,"name":""}`
+	req := httptest.NewRequest(http.MethodPut, "/api/restaurants/update", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	UpdateRestaurant(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rr.Code)
+	}
+}
+
+func TestUpdateRestaurant_NotFound(t *testing.T) {
+	setupTestDB()
+	defer teardownTestDB()
+
+	body := `{"id":999,"name":"Ghost"}`
+	req := httptest.NewRequest(http.MethodPut, "/api/restaurants/update", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	UpdateRestaurant(rr, req)
+
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", rr.Code)
+	}
+}
+
+func TestUpdateRestaurant_DuplicateName(t *testing.T) {
+	setupTestDB()
+	defer teardownTestDB()
+
+	database.DB.Exec("INSERT INTO restaurants (name) VALUES (?)", "Alpha")
+	database.DB.Exec("INSERT INTO restaurants (name) VALUES (?)", "Beta")
+
+	// Try renaming Beta to Alpha
+	body := `{"id":2,"name":"Alpha"}`
+	req := httptest.NewRequest(http.MethodPut, "/api/restaurants/update", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	UpdateRestaurant(rr, req)
+
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("expected 409 for duplicate name, got %d", rr.Code)
+	}
+}
+
 func TestDeleteRestaurant_Success(t *testing.T) {
 	setupTestDB()
 	defer teardownTestDB()
