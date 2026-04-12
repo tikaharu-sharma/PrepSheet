@@ -6,10 +6,13 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 
 	"prepsheet-backend/models"
 )
+
+func intToStr(n int) string { return strconv.Itoa(n) }
 
 // withEmployeeContext adds employee auth context values to a request.
 func withEmployeeContext(r *http.Request, userID int) *http.Request {
@@ -286,6 +289,38 @@ func TestGetMySales_Empty(t *testing.T) {
 	}
 }
 
+func TestGetMySales_WithDateFilter(t *testing.T) {
+	setupTestDB()
+	defer teardownTestDB()
+
+	empID := createTestEmployee(t)
+
+	// Add sales on different dates
+	for _, date := range []string{"2025-01-10", "2025-02-15", "2025-03-20"} {
+		body := `{"date":"` + date + `","restaurant":"Resto","lunch_head_count":10,"lunch_sale":100,"dinner_head_count":10,"dinner_sale":100,"credit_sale":0,"reji_money":200,"expenditures":[],"note":""}`
+		req := httptest.NewRequest(http.MethodPost, "/api/sales", bytes.NewBufferString(body))
+		req.Header.Set("Content-Type", "application/json")
+		req = withEmployeeContext(req, empID)
+		AddSale(httptest.NewRecorder(), req)
+	}
+
+	// Filter by date range
+	req := httptest.NewRequest(http.MethodGet, "/api/sales/my?start_date=2025-02-01&end_date=2025-02-28", nil)
+	req = withEmployeeContext(req, empID)
+	rr := httptest.NewRecorder()
+	GetMySales(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+
+	var sales []models.Sale
+	json.NewDecoder(rr.Body).Decode(&sales)
+	if len(sales) != 1 {
+		t.Fatalf("expected 1 sale in date range, got %d", len(sales))
+	}
+}
+
 func TestGetMonthlyReport_ManagerOnly(t *testing.T) {
 	setupTestDB()
 	defer teardownTestDB()
@@ -367,5 +402,234 @@ func TestGetSales_WithExpenditures(t *testing.T) {
 	}
 	if len(sales[0].Expenditures) != 2 {
 		t.Fatalf("expected 2 expenditures, got %d", len(sales[0].Expenditures))
+	}
+}
+
+func TestUpdateSale_Success(t *testing.T) {
+	setupTestDB()
+	defer teardownTestDB()
+
+	empID := createTestEmployee(t)
+
+	// Add a sale
+	saleBody := `{"date":"2025-01-15","restaurant":"Old Place","lunch_head_count":10,"lunch_sale":100,"dinner_head_count":20,"dinner_sale":200,"credit_sale":0,"reji_money":300,"expenditures":[{"title":"Gas","amount":25}],"note":"original"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/sales", bytes.NewBufferString(saleBody))
+	req.Header.Set("Content-Type", "application/json")
+	req = withEmployeeContext(req, empID)
+	rr := httptest.NewRecorder()
+	AddSale(rr, req)
+
+	var addResp map[string]interface{}
+	json.NewDecoder(rr.Body).Decode(&addResp)
+	saleID := int(addResp["sale_id"].(float64))
+
+	// Update the sale
+	updateBody := `{"id":` + intToStr(saleID) + `,"date":"2025-01-16","restaurant":"New Place","lunch_head_count":20,"lunch_sale":200,"dinner_head_count":30,"dinner_sale":350,"credit_sale":10,"reji_money":500,"expenditures":[{"title":"Fuel","amount":50}],"note":"updated"}`
+	req2 := httptest.NewRequest(http.MethodPut, "/api/sales/update", bytes.NewBufferString(updateBody))
+	req2.Header.Set("Content-Type", "application/json")
+	req2 = withEmployeeContext(req2, empID)
+	rr2 := httptest.NewRecorder()
+	UpdateSale(rr2, req2)
+
+	if rr2.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr2.Code, rr2.Body.String())
+	}
+
+	// Verify by fetching the sale
+	req3 := httptest.NewRequest(http.MethodGet, "/api/sales/my", nil)
+	req3 = withEmployeeContext(req3, empID)
+	rr3 := httptest.NewRecorder()
+	GetMySales(rr3, req3)
+
+	var sales []models.Sale
+	json.NewDecoder(rr3.Body).Decode(&sales)
+	if len(sales) != 1 {
+		t.Fatalf("expected 1 sale, got %d", len(sales))
+	}
+	if sales[0].Note != "updated" {
+		t.Fatalf("expected note 'updated', got '%s'", sales[0].Note)
+	}
+	if sales[0].LunchSale != 200 {
+		t.Fatalf("expected lunch_sale 200, got %f", sales[0].LunchSale)
+	}
+	if len(sales[0].Expenditures) != 1 {
+		t.Fatalf("expected 1 expenditure after update, got %d", len(sales[0].Expenditures))
+	}
+	if sales[0].Expenditures[0].Title != "Fuel" {
+		t.Fatalf("expected expenditure title 'Fuel', got '%s'", sales[0].Expenditures[0].Title)
+	}
+}
+
+func TestUpdateSale_NotOwner(t *testing.T) {
+	setupTestDB()
+	defer teardownTestDB()
+
+	empID := createTestEmployee(t)
+
+	// Add a sale as empID
+	saleBody := `{"date":"2025-01-15","restaurant":"Place","lunch_head_count":10,"lunch_sale":100,"dinner_head_count":20,"dinner_sale":200,"credit_sale":0,"reji_money":300,"expenditures":[],"note":""}`
+	req := httptest.NewRequest(http.MethodPost, "/api/sales", bytes.NewBufferString(saleBody))
+	req.Header.Set("Content-Type", "application/json")
+	req = withEmployeeContext(req, empID)
+	rr := httptest.NewRecorder()
+	AddSale(rr, req)
+
+	var addResp map[string]interface{}
+	json.NewDecoder(rr.Body).Decode(&addResp)
+	saleID := int(addResp["sale_id"].(float64))
+
+	// Try updating as a different employee
+	updateBody := `{"id":` + intToStr(saleID) + `,"date":"2025-01-16","restaurant":"Place","lunch_head_count":0,"lunch_sale":0,"dinner_head_count":0,"dinner_sale":0,"credit_sale":0,"reji_money":0,"expenditures":[],"note":""}`
+	req2 := httptest.NewRequest(http.MethodPut, "/api/sales/update", bytes.NewBufferString(updateBody))
+	req2.Header.Set("Content-Type", "application/json")
+	req2 = withEmployeeContext(req2, empID+999)
+	rr2 := httptest.NewRecorder()
+	UpdateSale(rr2, req2)
+
+	if rr2.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d", rr2.Code)
+	}
+}
+
+func TestUpdateSale_ManagerForbidden(t *testing.T) {
+	setupTestDB()
+	defer teardownTestDB()
+
+	body := `{"id":1,"date":"2025-01-15","restaurant":"Place","lunch_head_count":0,"lunch_sale":0,"dinner_head_count":0,"dinner_sale":0,"credit_sale":0,"reji_money":0,"expenditures":[],"note":""}`
+	req := httptest.NewRequest(http.MethodPut, "/api/sales/update", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	req = withManagerContext(req, 1)
+	rr := httptest.NewRecorder()
+	UpdateSale(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d", rr.Code)
+	}
+}
+
+func TestDeleteSale_Success(t *testing.T) {
+	setupTestDB()
+	defer teardownTestDB()
+
+	empID := createTestEmployee(t)
+
+	// Add a sale
+	saleBody := `{"date":"2025-01-15","restaurant":"Del Place","lunch_head_count":10,"lunch_sale":100,"dinner_head_count":20,"dinner_sale":200,"credit_sale":0,"reji_money":300,"expenditures":[{"title":"Gas","amount":25}],"note":""}`
+	req := httptest.NewRequest(http.MethodPost, "/api/sales", bytes.NewBufferString(saleBody))
+	req.Header.Set("Content-Type", "application/json")
+	req = withEmployeeContext(req, empID)
+	rr := httptest.NewRecorder()
+	AddSale(rr, req)
+
+	var addResp map[string]interface{}
+	json.NewDecoder(rr.Body).Decode(&addResp)
+	saleID := int(addResp["sale_id"].(float64))
+
+	// Delete the sale
+	req2 := httptest.NewRequest(http.MethodDelete, "/api/sales/delete?id="+intToStr(saleID), nil)
+	req2 = withEmployeeContext(req2, empID)
+	rr2 := httptest.NewRecorder()
+	DeleteSale(rr2, req2)
+
+	if rr2.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr2.Code, rr2.Body.String())
+	}
+
+	// Verify sale is gone
+	req3 := httptest.NewRequest(http.MethodGet, "/api/sales/my", nil)
+	req3 = withEmployeeContext(req3, empID)
+	rr3 := httptest.NewRecorder()
+	GetMySales(rr3, req3)
+
+	var sales []models.Sale
+	json.NewDecoder(rr3.Body).Decode(&sales)
+	if len(sales) != 0 {
+		t.Fatalf("expected 0 sales after delete, got %d", len(sales))
+	}
+}
+
+func TestDeleteSale_NotOwner(t *testing.T) {
+	setupTestDB()
+	defer teardownTestDB()
+
+	empID := createTestEmployee(t)
+
+	// Add a sale
+	saleBody := `{"date":"2025-01-15","restaurant":"Place","lunch_head_count":10,"lunch_sale":100,"dinner_head_count":20,"dinner_sale":200,"credit_sale":0,"reji_money":300,"expenditures":[],"note":""}`
+	req := httptest.NewRequest(http.MethodPost, "/api/sales", bytes.NewBufferString(saleBody))
+	req.Header.Set("Content-Type", "application/json")
+	req = withEmployeeContext(req, empID)
+	rr := httptest.NewRecorder()
+	AddSale(rr, req)
+
+	var addResp map[string]interface{}
+	json.NewDecoder(rr.Body).Decode(&addResp)
+	saleID := int(addResp["sale_id"].(float64))
+
+	// Try deleting as a different employee
+	req2 := httptest.NewRequest(http.MethodDelete, "/api/sales/delete?id="+intToStr(saleID), nil)
+	req2 = withEmployeeContext(req2, empID+999)
+	rr2 := httptest.NewRecorder()
+	DeleteSale(rr2, req2)
+
+	if rr2.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d", rr2.Code)
+	}
+}
+
+func TestDeleteSale_ManagerCanDeleteAny(t *testing.T) {
+	setupTestDB()
+	defer teardownTestDB()
+
+	empID := createTestEmployee(t)
+
+	// Add a sale as employee
+	saleBody := `{"date":"2025-01-15","restaurant":"Place","lunch_head_count":10,"lunch_sale":100,"dinner_head_count":20,"dinner_sale":200,"credit_sale":0,"reji_money":300,"expenditures":[],"note":""}`
+	req := httptest.NewRequest(http.MethodPost, "/api/sales", bytes.NewBufferString(saleBody))
+	req.Header.Set("Content-Type", "application/json")
+	req = withEmployeeContext(req, empID)
+	rr := httptest.NewRecorder()
+	AddSale(rr, req)
+
+	var addResp map[string]interface{}
+	json.NewDecoder(rr.Body).Decode(&addResp)
+	saleID := int(addResp["sale_id"].(float64))
+
+	// Manager deletes it
+	req2 := httptest.NewRequest(http.MethodDelete, "/api/sales/delete?id="+intToStr(saleID), nil)
+	req2 = withManagerContext(req2, 99)
+	rr2 := httptest.NewRecorder()
+	DeleteSale(rr2, req2)
+
+	if rr2.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr2.Code, rr2.Body.String())
+	}
+}
+
+func TestDeleteSale_NotFound(t *testing.T) {
+	setupTestDB()
+	defer teardownTestDB()
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/sales/delete?id=9999", nil)
+	req = withEmployeeContext(req, 1)
+	rr := httptest.NewRecorder()
+	DeleteSale(rr, req)
+
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", rr.Code)
+	}
+}
+
+func TestDeleteSale_MissingID(t *testing.T) {
+	setupTestDB()
+	defer teardownTestDB()
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/sales/delete", nil)
+	req = withEmployeeContext(req, 1)
+	rr := httptest.NewRecorder()
+	DeleteSale(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rr.Code)
 	}
 }
