@@ -1,12 +1,10 @@
 package handlers
 
 import (
-	"database/sql"
 	"encoding/json"
-	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"prepsheet-backend/database"
 	"prepsheet-backend/models"
@@ -28,45 +26,40 @@ func AddSale(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Date == "" || (req.RestaurantID == 0 && strings.TrimSpace(req.Restaurant) == "") {
-		http.Error(w, `{"error": "Date and restaurant are required"}`, http.StatusBadRequest)
+	if err := ValidateDate(req.Date); err != nil {
+		http.Error(w, fmt.Sprintf(`{"error": "%s"}`, err.Error()), http.StatusBadRequest)
 		return
 	}
-
-	if err := validateExpenditures(req.Expenditures); err != nil {
-		http.Error(w, `{"error": "`+err.Error()+`"}`, http.StatusBadRequest)
+	if err := ValidateRestaurantName(req.Restaurant); err != nil {
+		http.Error(w, fmt.Sprintf(`{"error": "%s"}`, err.Error()), http.StatusBadRequest)
 		return
 	}
-
-	if hasNegativeSaleValues(
-		req.LunchHeadCount,
-		req.DinnerHeadCount,
-		req.LunchSale,
-		req.DinnerSale,
-		req.CreditSale,
-		req.RejiMoney,
-	) {
-		http.Error(w, `{"error": "Sales values cannot be negative"}`, http.StatusBadRequest)
+	if err := ValidateNote(req.Note); err != nil {
+		http.Error(w, fmt.Sprintf(`{"error": "%s"}`, err.Error()), http.StatusBadRequest)
 		return
 	}
-
-	restaurantID, err := lookupAssignedRestaurantID(userID, req.RestaurantID, req.Restaurant)
-	if err == sql.ErrNoRows {
-		http.Error(w, `{"error": "You are not assigned to the selected restaurant"}`, http.StatusForbidden)
+	if len(req.Expenditures) > MaxExpenditures {
+		http.Error(w, fmt.Sprintf(`{"error": "Maximum %d expenditures allowed"}`, MaxExpenditures), http.StatusBadRequest)
 		return
 	}
-	if err != nil {
-		http.Error(w, `{"error": "Failed to validate restaurant assignment"}`, http.StatusInternalServerError)
-		return
-	}
-
-	if err := ensureNoDuplicateSale(restaurantID, req.Date, 0); err != nil {
-		if err == errDuplicateSale {
-			http.Error(w, `{"error": "A sales entry for this restaurant and date already exists"}`, http.StatusConflict)
+	for _, exp := range req.Expenditures {
+		if len(exp.Title) > MaxExpenditureTitle {
+			http.Error(w, fmt.Sprintf(`{"error": "Expenditure title must be %d characters or fewer"}`, MaxExpenditureTitle), http.StatusBadRequest)
 			return
 		}
-		http.Error(w, `{"error": "Failed to validate existing sales entry"}`, http.StatusInternalServerError)
-		return
+	}
+
+	// Look up restaurant by name, create if not found
+	var restaurantID int
+	err := database.DB.QueryRow("SELECT id FROM restaurants WHERE name = ?", req.Restaurant).Scan(&restaurantID)
+	if err != nil {
+		result, insertErr := database.DB.Exec("INSERT INTO restaurants (name) VALUES (?)", req.Restaurant)
+		if insertErr != nil {
+			http.Error(w, `{"error": "Failed to find or create restaurant"}`, http.StatusInternalServerError)
+			return
+		}
+		id, _ := result.LastInsertId()
+		restaurantID = int(id)
 	}
 
 	// Insert the sale
@@ -106,7 +99,7 @@ func AddSale(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// GetSales allows a manager to view sales entries for their restaurants with optional filters.
+// GetSales allows a manager to view sales entries scoped to their own restaurants.
 func GetSales(w http.ResponseWriter, r *http.Request) {
 	userID := r.Context().Value("user_id").(int)
 	role := r.Context().Value("role").(string)
@@ -118,7 +111,6 @@ func GetSales(w http.ResponseWriter, r *http.Request) {
 
 	startDate := r.URL.Query().Get("start_date")
 	endDate := r.URL.Query().Get("end_date")
-	restaurantIDParam := r.URL.Query().Get("restaurant_id")
 
 	query := `
 		SELECT s.id, s.employee_id, s.restaurant_id, r.name, s.date,
@@ -132,15 +124,6 @@ func GetSales(w http.ResponseWriter, r *http.Request) {
 	if startDate != "" && endDate != "" {
 		query += " AND s.date BETWEEN ? AND ?"
 		args = append(args, startDate, endDate)
-	}
-	if restaurantIDParam != "" {
-		restaurantID, err := strconv.Atoi(restaurantIDParam)
-		if err != nil {
-			http.Error(w, `{"error": "Invalid restaurant_id"}`, http.StatusBadRequest)
-			return
-		}
-		query += " AND s.restaurant_id = ?"
-		args = append(args, restaurantID)
 	}
 	query += " ORDER BY s.date DESC"
 
@@ -209,7 +192,7 @@ func GetMySales(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(sales)
 }
 
-// GetMonthlyReport returns aggregated monthly sales data for the manager's restaurants.
+// GetMonthlyReport returns aggregated monthly sales data.
 func GetMonthlyReport(w http.ResponseWriter, r *http.Request) {
 	userID := r.Context().Value("user_id").(int)
 	role := r.Context().Value("role").(string)
@@ -220,39 +203,38 @@ func GetMonthlyReport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	month := r.URL.Query().Get("month")
-	restaurantIDParam := r.URL.Query().Get("restaurant_id")
 
 	var report models.MonthlySalesReport
-	query := `
-		SELECT COALESCE(strftime('%Y-%m', s.date), COALESCE(?, strftime('%Y-%m', 'now'))) as month,
-		       COALESCE(SUM(s.lunch_sale + s.dinner_sale), 0) as total_sales,
-		       COALESCE(SUM(s.lunch_sale), 0) as total_lunch,
-		       COALESCE(SUM(s.dinner_sale), 0) as total_dinner,
-		       COUNT(DISTINCT s.id) as entry_count
-		FROM sales s
-		JOIN restaurants r ON r.id = s.restaurant_id
-		WHERE r.manager_id = ?`
+	var err error
 
-	args := []interface{}{month, userID}
 	if month != "" {
-		query += " AND strftime('%Y-%m', s.date) = ?"
-		args = append(args, month)
+		query := `
+			SELECT COALESCE(strftime('%Y-%m', s.date), ?) as month,
+			       COALESCE(SUM(s.lunch_sale + s.dinner_sale), 0) as total_sales,
+			       COALESCE(SUM(s.lunch_sale), 0) as total_lunch,
+			       COALESCE(SUM(s.dinner_sale), 0) as total_dinner,
+			       COUNT(*) as entry_count
+			FROM sales s
+			JOIN restaurants r ON s.restaurant_id = r.id
+			WHERE r.manager_id = ? AND strftime('%Y-%m', s.date) = ?`
+		err = database.DB.QueryRow(query, month, userID, month).Scan(
+			&report.Month, &report.TotalSales, &report.TotalLunch, &report.TotalDinner, &report.EntryCount,
+		)
 	} else {
-		query += " AND strftime('%Y-%m', s.date) = strftime('%Y-%m', 'now')"
-	}
-	if restaurantIDParam != "" {
-		restaurantID, err := strconv.Atoi(restaurantIDParam)
-		if err != nil {
-			http.Error(w, `{"error": "Invalid restaurant_id"}`, http.StatusBadRequest)
-			return
-		}
-		query += " AND s.restaurant_id = ?"
-		args = append(args, restaurantID)
+		query := `
+			SELECT COALESCE(strftime('%Y-%m', s.date), strftime('%Y-%m', 'now')) as month,
+			       COALESCE(SUM(s.lunch_sale + s.dinner_sale), 0) as total_sales,
+			       COALESCE(SUM(s.lunch_sale), 0) as total_lunch,
+			       COALESCE(SUM(s.dinner_sale), 0) as total_dinner,
+			       COUNT(*) as entry_count
+			FROM sales s
+			JOIN restaurants r ON s.restaurant_id = r.id
+			WHERE r.manager_id = ? AND strftime('%Y-%m', s.date) = strftime('%Y-%m', 'now')`
+		err = database.DB.QueryRow(query, userID).Scan(
+			&report.Month, &report.TotalSales, &report.TotalLunch, &report.TotalDinner, &report.EntryCount,
+		)
 	}
 
-	err := database.DB.QueryRow(query, args...).Scan(
-		&report.Month, &report.TotalSales, &report.TotalLunch, &report.TotalDinner, &report.EntryCount,
-	)
 	if err != nil {
 		http.Error(w, `{"error": "Failed to generate report"}`, http.StatusInternalServerError)
 		return
@@ -282,25 +264,6 @@ func UpdateSale(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error": "Sale ID is required"}`, http.StatusBadRequest)
 		return
 	}
-	if req.Date == "" || (req.RestaurantID == 0 && strings.TrimSpace(req.Restaurant) == "") {
-		http.Error(w, `{"error": "Date and restaurant are required"}`, http.StatusBadRequest)
-		return
-	}
-	if err := validateExpenditures(req.Expenditures); err != nil {
-		http.Error(w, `{"error": "`+err.Error()+`"}`, http.StatusBadRequest)
-		return
-	}
-	if hasNegativeSaleValues(
-		req.LunchHeadCount,
-		req.DinnerHeadCount,
-		req.LunchSale,
-		req.DinnerSale,
-		req.CreditSale,
-		req.RejiMoney,
-	) {
-		http.Error(w, `{"error": "Sales values cannot be negative"}`, http.StatusBadRequest)
-		return
-	}
 
 	// Verify the sale belongs to this employee
 	var ownerID int
@@ -314,23 +277,17 @@ func UpdateSale(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	restaurantID, err := lookupAssignedRestaurantID(userID, req.RestaurantID, req.Restaurant)
-	if err == sql.ErrNoRows {
-		http.Error(w, `{"error": "You are not assigned to the selected restaurant"}`, http.StatusForbidden)
-		return
-	}
+	// Look up restaurant by name, create if not found
+	var restaurantID int
+	err = database.DB.QueryRow("SELECT id FROM restaurants WHERE name = ?", req.Restaurant).Scan(&restaurantID)
 	if err != nil {
-		http.Error(w, `{"error": "Failed to validate restaurant assignment"}`, http.StatusInternalServerError)
-		return
-	}
-
-	if err := ensureNoDuplicateSale(restaurantID, req.Date, req.ID); err != nil {
-		if err == errDuplicateSale {
-			http.Error(w, `{"error": "A sales entry for this restaurant and date already exists"}`, http.StatusConflict)
+		result, insertErr := database.DB.Exec("INSERT INTO restaurants (name) VALUES (?)", req.Restaurant)
+		if insertErr != nil {
+			http.Error(w, `{"error": "Failed to find or create restaurant"}`, http.StatusInternalServerError)
 			return
 		}
-		http.Error(w, `{"error": "Failed to validate existing sales entry"}`, http.StatusInternalServerError)
-		return
+		id, _ := result.LastInsertId()
+		restaurantID = int(id)
 	}
 
 	// Update the sale
@@ -439,90 +396,6 @@ func scanSales(rows interface {
 		sales = []models.Sale{}
 	}
 	return sales, nil
-}
-
-var (
-	errDuplicateSale         = errors.New("duplicate sale")
-	errIncompleteExpenditure = errors.New("Each expenditure must include both title and amount")
-	errEmptyExpenditure      = errors.New("Empty expenditure rows are not allowed")
-)
-
-func validateExpenditures(expenditures []models.ExpenditureInput) error {
-	for _, exp := range expenditures {
-		hasTitle := strings.TrimSpace(exp.Title) != ""
-		hasAmount := exp.Amount != 0
-		if hasTitle != hasAmount {
-			return errIncompleteExpenditure
-		}
-		if !hasTitle && !hasAmount {
-			return errEmptyExpenditure
-		}
-	}
-	return nil
-}
-
-func hasNegativeSaleValues(lunchHeadCount, dinnerHeadCount int, lunchSale, dinnerSale, creditSale, rejiMoney float64) bool {
-	return lunchHeadCount < 0 ||
-		dinnerHeadCount < 0 ||
-		lunchSale < 0 ||
-		dinnerSale < 0 ||
-		creditSale < 0 ||
-		rejiMoney < 0
-}
-
-func lookupAssignedRestaurantID(userID, restaurantID int, restaurantName string) (int, error) {
-	var resolvedID int
-	var err error
-	if restaurantID != 0 {
-		err = database.DB.QueryRow(
-			`SELECT r.id
-			 FROM restaurants r
-			 JOIN assignments a ON a.restaurant_id = r.id
-			 WHERE a.employee_id = ?
-			   AND a.status = 'active'
-			   AND r.id = ?
-			 LIMIT 1`,
-			userID,
-			restaurantID,
-		).Scan(&resolvedID)
-	} else {
-		err = database.DB.QueryRow(
-			`SELECT r.id
-			 FROM restaurants r
-			 JOIN assignments a ON a.restaurant_id = r.id
-			 WHERE a.employee_id = ?
-			   AND a.status = 'active'
-			   AND r.name = ?
-			 LIMIT 1`,
-			userID,
-			restaurantName,
-		).Scan(&resolvedID)
-	}
-	return resolvedID, err
-}
-
-func ensureNoDuplicateSale(restaurantID int, date string, excludeSaleID int) error {
-	query := `
-		SELECT id
-		FROM sales
-		WHERE restaurant_id = ?
-		  AND date = ?`
-	args := []interface{}{restaurantID, date}
-	if excludeSaleID != 0 {
-		query += " AND id != ?"
-		args = append(args, excludeSaleID)
-	}
-	query += " LIMIT 1"
-
-	var existingSaleID int
-	err := database.DB.QueryRow(query, args...).Scan(&existingSaleID)
-	if err == sql.ErrNoRows {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	return errDuplicateSale
 }
 
 // getExpenditures fetches expenditures for a given sale ID.
