@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -35,8 +36,16 @@ func Signup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Name == "" || req.Email == "" || req.Password == "" {
-		http.Error(w, `{"error": "Name, email, and password are required"}`, http.StatusBadRequest)
+	if err := ValidateName(req.Name, "Name"); err != nil {
+		http.Error(w, fmt.Sprintf(`{"error": "%s"}`, err.Error()), http.StatusBadRequest)
+		return
+	}
+	if err := ValidateEmail(req.Email); err != nil {
+		http.Error(w, fmt.Sprintf(`{"error": "%s"}`, err.Error()), http.StatusBadRequest)
+		return
+	}
+	if err := ValidatePassword(req.Password); err != nil {
+		http.Error(w, fmt.Sprintf(`{"error": "%s"}`, err.Error()), http.StatusBadRequest)
 		return
 	}
 
@@ -84,6 +93,10 @@ func Login(w http.ResponseWriter, r *http.Request) {
 
 	if req.Email == "" || req.Password == "" {
 		http.Error(w, `{"error": "Email/Username and password are required"}`, http.StatusBadRequest)
+		return
+	}
+	if len(req.Email) > MaxEmailLength || len(req.Password) > MaxPasswordLength {
+		http.Error(w, `{"error": "Input exceeds maximum length"}`, http.StatusBadRequest)
 		return
 	}
 
@@ -194,7 +207,10 @@ func ChangePassword(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error": "Current password and new password are required"}`, http.StatusBadRequest)
 		return
 	}
-
+	if err := ValidatePassword(req.NewPassword); err != nil {
+		http.Error(w, fmt.Sprintf(`{"error": "%s"}`, err.Error()), http.StatusBadRequest)
+		return
+	}
 	if req.CurrentPassword == req.NewPassword {
 		http.Error(w, `{"error": "New password must be different from the current password"}`, http.StatusBadRequest)
 		return
@@ -378,8 +394,16 @@ func CreateEmployee(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Name == "" || req.Email == "" || req.Password == "" {
-		http.Error(w, `{"error": "Name, email, and password are required"}`, http.StatusBadRequest)
+	if err := ValidateName(req.Name, "Name"); err != nil {
+		http.Error(w, fmt.Sprintf(`{"error": "%s"}`, err.Error()), http.StatusBadRequest)
+		return
+	}
+	if err := ValidateEmail(req.Email); err != nil {
+		http.Error(w, fmt.Sprintf(`{"error": "%s"}`, err.Error()), http.StatusBadRequest)
+		return
+	}
+	if err := ValidatePassword(req.Password); err != nil {
+		http.Error(w, fmt.Sprintf(`{"error": "%s"}`, err.Error()), http.StatusBadRequest)
 		return
 	}
 
@@ -462,9 +486,23 @@ func UpdateEmployee(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.UserID == 0 || req.Name == "" || req.Email == "" {
-		http.Error(w, `{"error": "User ID, name, and email are required"}`, http.StatusBadRequest)
+	if req.UserID == 0 {
+		http.Error(w, `{"error": "User ID is required"}`, http.StatusBadRequest)
 		return
+	}
+	if err := ValidateName(req.Name, "Name"); err != nil {
+		http.Error(w, fmt.Sprintf(`{"error": "%s"}`, err.Error()), http.StatusBadRequest)
+		return
+	}
+	if err := ValidateEmail(req.Email); err != nil {
+		http.Error(w, fmt.Sprintf(`{"error": "%s"}`, err.Error()), http.StatusBadRequest)
+		return
+	}
+	if req.Password != "" {
+		if err := ValidatePassword(req.Password); err != nil {
+			http.Error(w, fmt.Sprintf(`{"error": "%s"}`, err.Error()), http.StatusBadRequest)
+			return
+		}
 	}
 
 	var empManagerID int
