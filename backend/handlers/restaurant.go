@@ -98,8 +98,8 @@ func AddRestaurant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Name == "" {
-		http.Error(w, `{"error": "Restaurant name is required"}`, http.StatusBadRequest)
+	if err := ValidateRestaurantName(req.Name); err != nil {
+		http.Error(w, fmt.Sprintf(`{"error": "%s"}`, err.Error()), http.StatusBadRequest)
 		return
 	}
 
@@ -139,8 +139,12 @@ func UpdateRestaurant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.ID == 0 || req.Name == "" {
-		http.Error(w, `{"error": "Restaurant ID and name are required"}`, http.StatusBadRequest)
+	if req.ID == 0 {
+		http.Error(w, `{"error": "Restaurant ID is required"}`, http.StatusBadRequest)
+		return
+	}
+	if err := ValidateRestaurantName(req.Name); err != nil {
+		http.Error(w, fmt.Sprintf(`{"error": "%s"}`, err.Error()), http.StatusBadRequest)
 		return
 	}
 
