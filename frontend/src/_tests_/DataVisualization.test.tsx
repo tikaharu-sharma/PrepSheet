@@ -33,3 +33,16 @@ const mockSales: Partial<SaleRecord>[] = [
   },
 ]
 
+describe('DataVisualization page', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('shows loading state initially', () => {
+    vi.mocked(api.fetchSales).mockReturnValue(new Promise(() => {}))
+
+    render(<DataVisualization />)
+
+    expect(screen.getByRole('progressbar')).toBeInTheDocument()
+  })
+})
