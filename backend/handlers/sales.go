@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -28,9 +29,29 @@ func AddSale(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Date == "" || (req.RestaurantID == 0 && strings.TrimSpace(req.Restaurant) == "") {
-		http.Error(w, `{"error": "Date and restaurant are required"}`, http.StatusBadRequest)
+	if err := ValidateDate(req.Date); err != nil {
+		http.Error(w, fmt.Sprintf(`{"error": "%s"}`, err.Error()), http.StatusBadRequest)
 		return
+	}
+	if req.RestaurantID == 0 {
+		if err := ValidateRestaurantName(req.Restaurant); err != nil {
+			http.Error(w, fmt.Sprintf(`{"error": "%s"}`, err.Error()), http.StatusBadRequest)
+			return
+		}
+	}
+	if err := ValidateNote(req.Note); err != nil {
+		http.Error(w, fmt.Sprintf(`{"error": "%s"}`, err.Error()), http.StatusBadRequest)
+		return
+	}
+	if len(req.Expenditures) > MaxExpenditures {
+		http.Error(w, fmt.Sprintf(`{"error": "Maximum %d expenditures allowed"}`, MaxExpenditures), http.StatusBadRequest)
+		return
+	}
+	for _, exp := range req.Expenditures {
+		if len(exp.Title) > MaxExpenditureTitle {
+			http.Error(w, fmt.Sprintf(`{"error": "Expenditure title must be %d characters or fewer"}`, MaxExpenditureTitle), http.StatusBadRequest)
+			return
+		}
 	}
 
 	if err := validateExpenditures(req.Expenditures); err != nil {
@@ -282,9 +303,29 @@ func UpdateSale(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error": "Sale ID is required"}`, http.StatusBadRequest)
 		return
 	}
-	if req.Date == "" || (req.RestaurantID == 0 && strings.TrimSpace(req.Restaurant) == "") {
-		http.Error(w, `{"error": "Date and restaurant are required"}`, http.StatusBadRequest)
+	if err := ValidateDate(req.Date); err != nil {
+		http.Error(w, fmt.Sprintf(`{"error": "%s"}`, err.Error()), http.StatusBadRequest)
 		return
+	}
+	if req.RestaurantID == 0 {
+		if err := ValidateRestaurantName(req.Restaurant); err != nil {
+			http.Error(w, fmt.Sprintf(`{"error": "%s"}`, err.Error()), http.StatusBadRequest)
+			return
+		}
+	}
+	if err := ValidateNote(req.Note); err != nil {
+		http.Error(w, fmt.Sprintf(`{"error": "%s"}`, err.Error()), http.StatusBadRequest)
+		return
+	}
+	if len(req.Expenditures) > MaxExpenditures {
+		http.Error(w, fmt.Sprintf(`{"error": "Maximum %d expenditures allowed"}`, MaxExpenditures), http.StatusBadRequest)
+		return
+	}
+	for _, exp := range req.Expenditures {
+		if len(exp.Title) > MaxExpenditureTitle {
+			http.Error(w, fmt.Sprintf(`{"error": "Expenditure title must be %d characters or fewer"}`, MaxExpenditureTitle), http.StatusBadRequest)
+			return
+		}
 	}
 	if err := validateExpenditures(req.Expenditures); err != nil {
 		http.Error(w, `{"error": "`+err.Error()+`"}`, http.StatusBadRequest)
