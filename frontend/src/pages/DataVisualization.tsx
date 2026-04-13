@@ -24,16 +24,11 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  Legend,
   ResponsiveContainer,
-  Scatter,
-  ScatterChart,
   Tooltip,
   XAxis,
   YAxis,
-  ZAxis,
-  Legend,
-  Line,
-  LineChart,
 } from "recharts";
 import { fetchSales, type SaleRecord } from "../lib/api";
 import { useRestaurant } from "../context/useRestaurant";
@@ -58,12 +53,9 @@ interface RestaurantMetric {
   restaurantId: number;
   restaurantName: string;
   totalSales: number;
-  lunchSales: number;
-  dinnerSales: number;
   totalGuests: number;
-  lunchGuests: number;
-  dinnerGuests: number;
-  avgSpendPerGuest: number;
+  averageGuestsPerDay: number;
+  totalExpenditures: number;
   salesEntries: number;
 }
 
@@ -95,20 +87,8 @@ const formatMonthLabel = (month: string) => {
   return `${MONTH_LABELS[monthValue - 1] ?? monthValue} ${year}`;
 };
 
-const getShortMonthLabel = (month: string) => {
-  const [year, monthValue] = month.split("-").map(Number);
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    year: "2-digit",
-    timeZone: "UTC",
-  }).format(new Date(Date.UTC(year, monthValue - 1, 1)));
-};
-
-const shiftMonth = (month: string, offset: number) => {
-  const [year, monthValue] = month.split("-").map(Number);
-  const date = new Date(year, monthValue - 1 + offset, 1);
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-};
+const getSaleExpenditures = (sale: SaleRecord) =>
+  sale.expenditures.reduce((sum, item) => sum + item.amount, 0);
 
 const buildRestaurantMetrics = (
   sales: SaleRecord[],
@@ -126,21 +106,15 @@ const buildRestaurantMetrics = (
       restaurantId: sale.restaurant_id,
       restaurantName,
       totalSales: 0,
-      lunchSales: 0,
-      dinnerSales: 0,
       totalGuests: 0,
-      lunchGuests: 0,
-      dinnerGuests: 0,
-      avgSpendPerGuest: 0,
+      averageGuestsPerDay: 0,
+      totalExpenditures: 0,
       salesEntries: 0,
     };
 
     current.totalSales += totalSales;
-    current.lunchSales += sale.lunch_sale;
-    current.dinnerSales += sale.dinner_sale;
     current.totalGuests += totalGuests;
-    current.lunchGuests += sale.lunch_head_count;
-    current.dinnerGuests += sale.dinner_head_count;
+    current.totalExpenditures += getSaleExpenditures(sale);
     current.salesEntries += 1;
 
     grouped.set(sale.restaurant_id, current);
@@ -149,7 +123,7 @@ const buildRestaurantMetrics = (
   return Array.from(grouped.values())
     .map((metric) => ({
       ...metric,
-      avgSpendPerGuest: metric.totalGuests > 0 ? metric.totalSales / metric.totalGuests : 0,
+      averageGuestsPerDay: metric.salesEntries > 0 ? metric.totalGuests / metric.salesEntries : 0,
     }))
     .sort((left, right) => right.totalSales - left.totalSales);
 };
@@ -269,54 +243,28 @@ export default function DataVisualization() {
       (acc, metric) => {
         acc.totalSales += metric.totalSales;
         acc.totalGuests += metric.totalGuests;
+        acc.totalExpenditures += metric.totalExpenditures;
+        acc.totalEntries += metric.salesEntries;
         return acc;
       },
-      { totalSales: 0, totalGuests: 0 }
+      { totalSales: 0, totalGuests: 0, totalExpenditures: 0, totalEntries: 0 }
     );
 
     return {
       ...totals,
-      averageSpendPerGuest: totals.totalGuests > 0 ? totals.totalSales / totals.totalGuests : 0,
+      averageGuestsPerDay: totals.totalEntries > 0 ? totals.totalGuests / totals.totalEntries : 0,
     };
   }, [restaurantMetrics]);
 
-  const monthlyTrendData = useMemo(() => {
-    if (!selectedMonth) {
-      return [];
-    }
-
-    const months = Array.from({ length: 6 }, (_, index) => shiftMonth(selectedMonth, -(5 - index)));
-    return months.map((month) => {
-      const monthSales = allSales.filter((sale) => sale.date.startsWith(`${month}-`));
-      const totals = buildRestaurantMetrics(monthSales, restaurantMap).reduce(
-        (acc, metric) => {
-          acc.totalSales += metric.totalSales;
-          acc.totalGuests += metric.totalGuests;
-          return acc;
-        },
-        { totalSales: 0, totalGuests: 0 }
-      );
-
-      return {
-        month: getShortMonthLabel(month),
-        sales: totals.totalSales,
-        guests: totals.totalGuests,
-      };
-    });
-  }, [allSales, restaurantMap, selectedMonth]);
-
-  const performanceScatterData = restaurantMetrics.map((metric) => ({
-    x: metric.totalGuests,
-    y: Number(metric.totalSales.toFixed(2)),
-    z: Math.max(metric.totalSales, 1),
+  const salesAndPeopleChartData = restaurantMetrics.map((metric) => ({
     name: metric.restaurantName,
     totalSales: metric.totalSales,
-    avgSpendPerGuest: metric.avgSpendPerGuest,
+    averageGuestsPerDay: Number(metric.averageGuestsPerDay.toFixed(1)),
   }));
-  const comparisonChartData = restaurantMetrics.map((metric) => ({
+
+  const expendituresChartData = restaurantMetrics.map((metric) => ({
     name: metric.restaurantName,
-    totalSales: metric.totalSales,
-    totalGuests: metric.totalGuests,
+    totalExpenditures: metric.totalExpenditures,
   }));
 
   if (loading) {
@@ -344,7 +292,7 @@ export default function DataVisualization() {
               Restaurant Comparison
             </Typography>
             <Typography variant="body1" color="text.secondary">
-              Compare traffic and total sales across all restaurants for a selected month.
+              Compare all restaurants in one view using total sales, average people per day, and expenditures.
             </Typography>
           </Box>
 
@@ -411,7 +359,6 @@ export default function DataVisualization() {
                 color="primary"
                 variant="outlined"
               />
-              <Chip label="All restaurants" variant="outlined" />
               <Chip label={`${restaurantMetrics.length} restaurants compared`} variant="outlined" />
             </Stack>
 
@@ -442,211 +389,111 @@ export default function DataVisualization() {
 
               <Card sx={chartCardSx}>
                 <Typography variant="body2" color="text.secondary">
-                  Avg Sale Per Person
+                  Avg People Per Day
                 </Typography>
                 <Typography variant="h5" sx={{ fontWeight: 700, mt: 1 }}>
-                  {formatCurrency(overview.averageSpendPerGuest)}
+                  {overview.averageGuestsPerDay.toFixed(1)}
                 </Typography>
               </Card>
 
               <Card sx={chartCardSx}>
                 <Typography variant="body2" color="text.secondary">
-                  Restaurants Included
+                  Total Expenditures
                 </Typography>
                 <Typography variant="h5" sx={{ fontWeight: 700, mt: 1 }}>
-                  {restaurantMetrics.length}
+                  {formatCurrency(overview.totalExpenditures)}
                 </Typography>
-              </Card>
-            </Box>
-
-            <Box
-              sx={{
-                display: "grid",
-                gridTemplateColumns: { xs: "1fr", xl: "1.2fr 1fr" },
-                gap: 2,
-              }}
-            >
-              <Card sx={chartCardSx}>
-                <Typography variant="h6" sx={{ mb: 1 }}>
-                  Total Sales by Restaurant
-                </Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                  Monthly sales comparison across the selected restaurants.
-                </Typography>
-                <Box sx={{ width: "100%", height: 320 }}>
-                  <ResponsiveContainer>
-                    <BarChart data={restaurantMetrics}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="restaurantName" />
-                      <YAxis tickFormatter={(value) => `${Math.round(Number(value) / 1000)}k`} />
-                      <Tooltip formatter={(value) => formatCurrency(Number(value ?? 0))} />
-                      <Bar dataKey="totalSales" radius={[8, 8, 0, 0]}>
-                        {restaurantMetrics.map((metric, index) => (
-                          <Cell key={metric.restaurantId} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </Box>
-              </Card>
-
-              <Card sx={chartCardSx}>
-                <Typography variant="h6" sx={{ mb: 1 }}>
-                  Persons vs Sales
-                </Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                  See which restaurants convert higher traffic into higher sales.
-                </Typography>
-                <Box sx={{ width: "100%", height: 320 }}>
-                  <ResponsiveContainer>
-                    <BarChart data={comparisonChartData}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="name" />
-                      <YAxis yAxisId="left" tickFormatter={(value) => `${Math.round(Number(value))}`} />
-                      <YAxis
-                        yAxisId="right"
-                        orientation="right"
-                        tickFormatter={(value) => `${Math.round(Number(value) / 1000)}k`}
-                      />
-                      <Tooltip
-                        formatter={(value, name) =>
-                          name === "Total Sales"
-                            ? formatCurrency(Number(value ?? 0))
-                            : Number(value ?? 0).toLocaleString("en-US")
-                        }
-                      />
-                      <Legend />
-                      <Bar yAxisId="left" dataKey="totalGuests" name="Persons" fill="#ffb347" radius={[8, 8, 0, 0]} />
-                      <Bar yAxisId="right" dataKey="totalSales" name="Total Sales" fill="#4ea674" radius={[8, 8, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </Box>
-              </Card>
-            </Box>
-
-            <Box
-              sx={{
-                display: "grid",
-                gridTemplateColumns: { xs: "1fr", xl: "1fr 1fr" },
-                gap: 2,
-              }}
-            >
-              <Card sx={chartCardSx}>
-                <Typography variant="h6" sx={{ mb: 1 }}>
-                  Persons vs Total Sales Scatter
-                </Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                  Each point is a restaurant. Higher and farther right means more people and more sales.
-                </Typography>
-                <Box sx={{ width: "100%", height: 320 }}>
-                  <ResponsiveContainer>
-                    <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 10 }}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis
-                        type="number"
-                        dataKey="x"
-                        name="Persons"
-                        tickFormatter={(value) => Number(value).toLocaleString("en-US")}
-                      />
-                      <YAxis
-                        type="number"
-                        dataKey="y"
-                        name="Total sales"
-                        tickFormatter={(value) => `${Math.round(Number(value) / 1000)}k`}
-                      />
-                      <ZAxis type="number" dataKey="z" range={[120, 500]} />
-                      <Tooltip
-                        cursor={{ strokeDasharray: "3 3" }}
-                        formatter={(value, name) => {
-                          if (name === "Total sales") {
-                            return formatCurrency(Number(value ?? 0));
-                          }
-                          return Number(value ?? 0).toLocaleString("en-US");
-                        }}
-                        content={({ active, payload }) => {
-                          if (!active || !payload || payload.length === 0) {
-                            return null;
-                          }
-
-                          const point = payload[0].payload as {
-                            name: string;
-                            x: number;
-                            y: number;
-                            totalSales: number;
-                            avgSpendPerGuest: number;
-                          };
-
-                          return (
-                            <Paper sx={{ p: 1.5 }}>
-                              <Typography variant="subtitle2">{point.name}</Typography>
-                              <Typography variant="body2">
-                                Persons: {point.x.toLocaleString("en-US")}
-                              </Typography>
-                              <Typography variant="body2">
-                                Total sales: {formatCurrency(point.totalSales)}
-                              </Typography>
-                              <Typography variant="body2">
-                                Avg sale/person: {formatCurrency(point.avgSpendPerGuest)}
-                              </Typography>
-                            </Paper>
-                          );
-                        }}
-                      />
-                      <Scatter name="Restaurants" data={performanceScatterData} fill="#4ea674" />
-                    </ScatterChart>
-                  </ResponsiveContainer>
-                </Box>
-              </Card>
-
-              <Card sx={chartCardSx}>
-                <Typography variant="h6" sx={{ mb: 1 }}>
-                  Persons and Sales Trend
-                </Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                  Six-month trend for the selected restaurants, using total persons and total sales.
-                </Typography>
-                <Box sx={{ width: "100%", height: 320 }}>
-                  <ResponsiveContainer>
-                    <LineChart data={monthlyTrendData}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="month" />
-                      <YAxis yAxisId="left" tickFormatter={(value) => `${Math.round(Number(value))}`} />
-                      <YAxis
-                        yAxisId="right"
-                        orientation="right"
-                        tickFormatter={(value) => `${Math.round(Number(value) / 1000)}k`}
-                      />
-                      <Tooltip
-                        formatter={(value, name) =>
-                          name === "Total Sales"
-                            ? formatCurrency(Number(value ?? 0))
-                            : Number(value ?? 0).toLocaleString("en-US")
-                        }
-                      />
-                      <Legend />
-                      <Line yAxisId="left" type="monotone" dataKey="guests" name="Persons" stroke="#ffb347" strokeWidth={3} />
-                      <Line yAxisId="right" type="monotone" dataKey="sales" name="Total Sales" stroke="#4ea674" strokeWidth={3} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </Box>
               </Card>
             </Box>
 
             <Card sx={chartCardSx}>
-              <Typography variant="h6" sx={{ mb: 1 }}>Restaurant Comparison Table</Typography>
+              <Typography variant="h6" sx={{ mb: 1 }}>
+                Sales and People by Restaurant
+              </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Ranked view of restaurant traffic and total sales for the selected month.
+                One chart for all restaurants. Compare total sales against the average number of people per day.
+              </Typography>
+              <Box sx={{ width: "100%", height: 360 }}>
+                <ResponsiveContainer>
+                  <BarChart data={salesAndPeopleChartData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" />
+                    <YAxis
+                      yAxisId="left"
+                      tickFormatter={(value) => `${Math.round(Number(value))}`}
+                      label={{ value: "People / Day", angle: -90, position: "insideLeft" }}
+                    />
+                    <YAxis
+                      yAxisId="right"
+                      orientation="right"
+                      tickFormatter={(value) => `${Math.round(Number(value) / 1000)}k`}
+                      label={{ value: "Sales", angle: 90, position: "insideRight" }}
+                    />
+                    <Tooltip
+                      formatter={(value, name) =>
+                        name === "Total Sales"
+                          ? formatCurrency(Number(value ?? 0))
+                          : `${Number(value ?? 0).toLocaleString("en-US")} people`
+                      }
+                    />
+                    <Legend />
+                    <Bar
+                      yAxisId="left"
+                      dataKey="averageGuestsPerDay"
+                      name="Avg People / Day"
+                      fill="#ffb347"
+                      radius={[8, 8, 0, 0]}
+                    />
+                    <Bar yAxisId="right" dataKey="totalSales" name="Total Sales" radius={[8, 8, 0, 0]}>
+                      {restaurantMetrics.map((metric, index) => (
+                        <Cell key={metric.restaurantId} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </Box>
+            </Card>
+
+            <Card sx={chartCardSx}>
+              <Typography variant="h6" sx={{ mb: 1 }}>
+                Expenditures by Restaurant
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                One bar chart for all restaurants so expenditure differences are easier to compare.
+              </Typography>
+              <Box sx={{ width: "100%", height: 360 }}>
+                <ResponsiveContainer>
+                  <BarChart data={expendituresChartData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" />
+                    <YAxis tickFormatter={(value) => `${Math.round(Number(value) / 1000)}k`} />
+                    <Tooltip formatter={(value) => formatCurrency(Number(value ?? 0))} />
+                    <Bar dataKey="totalExpenditures" name="Expenditures" radius={[8, 8, 0, 0]}>
+                      {restaurantMetrics.map((metric, index) => (
+                        <Cell key={metric.restaurantId} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </Box>
+            </Card>
+
+            <Card sx={chartCardSx}>
+              <Typography variant="h6" sx={{ mb: 1 }}>
+                Restaurant Comparison Table
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Summary table for the selected month across all restaurants.
               </Typography>
               <TableContainer component={Paper} variant="outlined">
                 <Table size="small">
                   <TableHead>
                     <TableRow>
                       <TableCell>Restaurant</TableCell>
-                      <TableCell align="right">Persons</TableCell>
                       <TableCell align="right">Total Sales</TableCell>
-                      <TableCell align="right">Lunch Persons</TableCell>
-                      <TableCell align="right">Dinner Persons</TableCell>
-                      <TableCell align="right">Avg Sale / Person</TableCell>
+                      <TableCell align="right">Total Persons</TableCell>
+                      <TableCell align="right">Avg People / Day</TableCell>
+                      <TableCell align="right">Expenditures</TableCell>
                       <TableCell align="right">Entries</TableCell>
                     </TableRow>
                   </TableHead>
@@ -654,24 +501,11 @@ export default function DataVisualization() {
                     {restaurantMetrics.map((metric) => (
                       <TableRow key={metric.restaurantId} hover>
                         <TableCell>{metric.restaurantName}</TableCell>
-                        <TableCell align="right">
-                          {metric.totalGuests.toLocaleString("en-US")}
-                        </TableCell>
-                        <TableCell align="right">
-                          {formatCurrency(metric.totalSales)}
-                        </TableCell>
-                        <TableCell align="right">
-                          {metric.lunchGuests.toLocaleString("en-US")}
-                        </TableCell>
-                        <TableCell align="right">
-                          {metric.dinnerGuests.toLocaleString("en-US")}
-                        </TableCell>
-                        <TableCell align="right">
-                          {formatCurrency(metric.avgSpendPerGuest)}
-                        </TableCell>
-                        <TableCell align="right">
-                          {metric.salesEntries}
-                        </TableCell>
+                        <TableCell align="right">{formatCurrency(metric.totalSales)}</TableCell>
+                        <TableCell align="right">{metric.totalGuests.toLocaleString("en-US")}</TableCell>
+                        <TableCell align="right">{metric.averageGuestsPerDay.toFixed(1)}</TableCell>
+                        <TableCell align="right">{formatCurrency(metric.totalExpenditures)}</TableCell>
+                        <TableCell align="right">{metric.salesEntries}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
