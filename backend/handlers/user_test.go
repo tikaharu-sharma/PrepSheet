@@ -184,7 +184,7 @@ func TestLogin_NonexistentUser(t *testing.T) {
 	setupTestDB()
 	defer teardownTestDB()
 
-	loginBody := `{"email":"nobody@example.com","password":"pass"}`
+	loginBody := `{"email":"nobody@example.com","password":"password"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/login", bytes.NewBufferString(loginBody))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
@@ -265,8 +265,8 @@ func TestGetUsers_WithData(t *testing.T) {
 
 	// Create two users
 	for _, body := range []string{
-		`{"name":"Alice","email":"alice@example.com","password":"pass","role":"manager"}`,
-		`{"name":"Bob","email":"bob@example.com","password":"pass","role":"employee"}`,
+		`{"name":"Alice","email":"alice@example.com","password":"password","role":"manager"}`,
+		`{"name":"Bob","email":"bob@example.com","password":"password","role":"employee"}`,
 	} {
 		req := httptest.NewRequest(http.MethodPost, "/api/signup", bytes.NewBufferString(body))
 		req.Header.Set("Content-Type", "application/json")
@@ -293,7 +293,7 @@ func TestUpdateUserStatus_Success(t *testing.T) {
 	defer teardownTestDB()
 
 	// Create a user
-	signupBody := `{"name":"Status User","email":"status@example.com","password":"pass","role":"employee"}`
+	signupBody := `{"name":"Status User","email":"status@example.com","password":"password","role":"employee"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/signup", bytes.NewBufferString(signupBody))
 	req.Header.Set("Content-Type", "application/json")
 	Signup(httptest.NewRecorder(), req)
