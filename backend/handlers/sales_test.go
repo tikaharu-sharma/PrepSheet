@@ -36,7 +36,7 @@ func withManagerContext(r *http.Request, userID int) *http.Request {
 // createTestEmployee creates a user and restaurant for sale tests, returns user ID.
 func createTestEmployee(t *testing.T) int {
 	t.Helper()
-	body := `{"name":"Sale Emp","email":"saleemp@example.com","password":"pass","role":"employee"}`
+	body := `{"name":"Sale Emp","email":"saleemp@example.com","password":"password","role":"employee"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/signup", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
@@ -51,7 +51,7 @@ func createTestEmployee(t *testing.T) int {
 
 func createTestManager(t *testing.T) int {
 	t.Helper()
-	body := `{"name":"Sale Mgr","email":"salmgr@example.com","password":"pass","role":"manager"}`
+	body := `{"name":"Sale Mgr","email":"salmgr@example.com","password":"password","role":"manager"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/signup", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
