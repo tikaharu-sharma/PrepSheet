@@ -5,6 +5,8 @@ import Box from '@mui/material/Box'
 import Avatar from "@mui/material/Avatar"
 import IconButton from '@mui/material/IconButton'
 import MenuIcon from '@mui/icons-material/Menu'
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
+import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 import Menu from '@mui/material/Menu'
 import MenuItem from '@mui/material/MenuItem'
 import Typography from '@mui/material/Typography'
@@ -17,9 +19,11 @@ import { useAuth } from '../context/AuthContext'
 
 interface NavbarProps {
   handleDrawerToggle: () => void;
+  collapsed: boolean;
+  onDesktopSidebarToggle: () => void;
 }
 
-export default function Navbar({ handleDrawerToggle }: NavbarProps) {
+export default function Navbar({ handleDrawerToggle, collapsed, onDesktopSidebarToggle }: NavbarProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const navigate = useNavigate();
@@ -43,16 +47,15 @@ export default function Navbar({ handleDrawerToggle }: NavbarProps) {
   };
 
 	return (
-	 <AppBar position="fixed"
+	 <AppBar position="static"
       color="inherit"
       elevation={1}
       sx={{
-        ml: isMobile ? 0 : "260px",
-        width: isMobile ? "100%" : "calc(100% - 260px)"
+        width: "100%"
       }}
     >
       <Toolbar>
-        {isMobile && (
+        {isMobile ? (
           <IconButton
             color="inherit"
             aria-label="open drawer"
@@ -61,6 +64,16 @@ export default function Navbar({ handleDrawerToggle }: NavbarProps) {
             sx={{ mr: 2 }}
           >
             <MenuIcon />
+          </IconButton>
+        ) : (
+          <IconButton
+            color="inherit"
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            edge="start"
+            onClick={onDesktopSidebarToggle}
+            sx={{ mr: 2 }}
+          >
+            {collapsed ? <ChevronRightIcon /> : <ChevronLeftIcon />}
           </IconButton>
         )}
         {/* pushes content to right */}

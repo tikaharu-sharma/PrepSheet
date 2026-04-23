@@ -10,7 +10,7 @@ import {
   IconButton,
   useTheme,
   useMediaQuery,
-  MenuItem,
+  Tooltip,
 } from "@mui/material";
 
 import HomeIcon from "@mui/icons-material/Home";
@@ -21,6 +21,8 @@ import StoreIcon from "@mui/icons-material/Store";
 import InsightsIcon from "@mui/icons-material/Insights";
 import SettingsIcon from "@mui/icons-material/Settings";
 import LogoutIcon from "@mui/icons-material/Logout";
+import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
+import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import { useNavigate, useLocation, Link as RouterLink } from 'react-router-dom'
 import { clearAuthSession } from '../lib/auth'
 
@@ -42,9 +44,13 @@ interface MenuItem {
 interface SidebarProps {
   mobileOpen: boolean;
   handleDrawerToggle: () => void;
+  collapsed: boolean;
+  onCollapseToggle: () => void;
 }
 
-export default function Sidebar({ mobileOpen, handleDrawerToggle }: SidebarProps){
+const collapsedDrawerWidth = 88;
+
+export default function Sidebar({ mobileOpen, handleDrawerToggle, collapsed, onCollapseToggle }: SidebarProps){
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
@@ -87,72 +93,95 @@ const getItemStyle = (path: string) => ({
     color: location.pathname === path ? "#ffffff" : "inherit",
     borderRadius: "8px",
     mb: 0.5,
+    minHeight: 52,
+    px: collapsed && !isMobile ? 1.5 : 2,
+    justifyContent: collapsed && !isMobile ? "center" : "flex-start",
     "&:hover": {
       backgroundColor:
         location.pathname === path ? activeColor : "rgba(0,0,0,0.04)"
     }
   });
 
-  return(
-    <Drawer
-    variant={isMobile ? "temporary" : "permanent"}
-    open={isMobile ? mobileOpen : true}
-    onClose={handleDrawerToggle}
-    ModalProps={{
-      keepMounted: true, // Better open performance on mobile.
-    }}
-    sx = {{
-        width: drawerWidth,
-        flexShrink:0,
-        "& .MuiDrawer-paper":{
-            width: drawerWidth,
-            boxSizing: "border-box",
-            display:"flex",
-            flexDirection: "column"
-        }
-    }}
-    >
-      <Box
+  const sidebarContent = (
+    <Box
       sx={{
         display: "flex",
         flexDirection: "column",
         height: "100%",
-        p: 2
+        p: collapsed && !isMobile ? 1.5 : 2,
       }}
     >
-      {/* TOP SECTION*/}
       <Box>
-        {/* LOGO */}
-        <Box sx={{ mb: 3, cursor: 'pointer' }} onClick={handleLogoClick}>
-          <img src={PrepSheetLogo} alt="PrepSheet Logo" style={{ width: 140}} />
+        <Box
+          sx={{
+            mb: 3,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: collapsed && !isMobile ? "center" : "space-between",
+            gap: 1,
+          }}
+        >
+          <Box
+            sx={{
+              cursor: "pointer",
+              overflow: "hidden",
+              display: "flex",
+              justifyContent: collapsed && !isMobile ? "center" : "flex-start",
+              flex: 1,
+            }}
+            onClick={handleLogoClick}
+          >
+            <img
+              src={PrepSheetLogo}
+              alt="PrepSheet Logo"
+              style={{ width: collapsed && !isMobile ? 48 : 140, transition: "width 200ms ease" }}
+            />
+          </Box>
+
+          {!isMobile ? (
+            <IconButton onClick={onCollapseToggle} aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}>
+              {collapsed ? <ChevronRightIcon /> : <ChevronLeftIcon />}
+            </IconButton>
+          ) : null}
         </Box>
 
-
-
-        {/* MAIN MENU */}
         <List>
-          {filteredMenuItems.map((item) => (
-            <ListItemButton
-              key={item.text}
-              component={RouterLink}
-              to={item.path}
-              sx={getItemStyle(item.path)}
-            >
-              <ListItemIcon
-                sx={{
-                  color: location.pathname === item.path ? "#ffffff" : "inherit"
-                }}
+          {filteredMenuItems.map((item) => {
+            const listItem = (
+              <ListItemButton
+                key={item.text}
+                component={RouterLink}
+                to={item.path}
+                sx={getItemStyle(item.path)}
               >
-                {item.icon}
-              </ListItemIcon>
+                <ListItemIcon
+                  sx={{
+                    color: location.pathname === item.path ? "#ffffff" : "inherit",
+                    minWidth: collapsed && !isMobile ? 0 : 40,
+                    justifyContent: "center",
+                    mr: collapsed && !isMobile ? 0 : 1,
+                  }}
+                >
+                  {item.icon}
+                </ListItemIcon>
 
-              <ListItemText primary={item.text} />
-            </ListItemButton>
-          ))}
+                {collapsed && !isMobile ? null : <ListItemText primary={item.text} />}
+              </ListItemButton>
+            );
+
+            if (collapsed && !isMobile) {
+              return (
+                <Tooltip key={item.text} title={item.text} placement="right">
+                  {listItem}
+                </Tooltip>
+              );
+            }
+
+            return listItem;
+          })}
         </List>
-        </Box>
+      </Box>
 
-      {/* BOTTOM PROFILE */}
       <Box
         sx={{
           mt: "auto",
@@ -160,20 +189,70 @@ const getItemStyle = (path: string) => ({
           borderTop: "1px solid #eee",
           display: "flex",
           alignItems: "center",
-          gap: 1
+          justifyContent: collapsed && !isMobile ? "center" : "space-between",
+          gap: 1,
         }}
       >
-        <Avatar />
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0 }}>
+          <Avatar />
 
-        <Box sx={{ flexGrow: 1 }}>
-          <Typography variant="body2">{user?.name ?? ''}</Typography>
-          <Typography variant="caption">{user?.email ?? ''}</Typography>
+          {collapsed && !isMobile ? null : (
+            <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+              <Typography variant="body2" noWrap>{user?.name ?? ''}</Typography>
+              <Typography variant="caption" noWrap>{user?.email ?? ''}</Typography>
+            </Box>
+          )}
         </Box>
 
-        <IconButton onClick = {handleLogout}>
-          <LogoutIcon />
-        </IconButton>
+        <Tooltip title="Logout" placement="right">
+          <IconButton onClick={handleLogout}>
+            <LogoutIcon />
+          </IconButton>
+        </Tooltip>
       </Box>
     </Box>
-  </Drawer>
-)}
+  );
+
+  if (isMobile) {
+    return (
+      <Drawer
+        variant="temporary"
+        open={mobileOpen}
+        onClose={handleDrawerToggle}
+        ModalProps={{
+          keepMounted: true,
+        }}
+        sx={{
+          "& .MuiDrawer-paper": {
+            width: drawerWidth,
+            boxSizing: "border-box",
+            display: "flex",
+            flexDirection: "column",
+          },
+        }}
+      >
+        {sidebarContent}
+      </Drawer>
+    );
+  }
+
+  return (
+    <Box
+      component="aside"
+      sx={{
+        width: collapsed ? collapsedDrawerWidth : drawerWidth,
+        transition: theme.transitions.create("width", {
+          easing: theme.transitions.easing.sharp,
+          duration: theme.transitions.duration.enteringScreen,
+        }),
+        borderRight: "1px solid #e0e0e0",
+        backgroundColor: "#ffffff",
+        flexShrink: 0,
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
+      {sidebarContent}
+    </Box>
+  );
+}
