@@ -262,6 +262,11 @@ const getItemStyle = (path: string) => ({
       component="aside"
       sx={{
         width: collapsed ? collapsedDrawerWidth : drawerWidth,
+        height: "100vh",
+        position: "sticky",
+        top: 0,
+        alignSelf: "flex-start",
+        overflowY: "auto",
         transition: theme.transitions.create("width", {
           easing: theme.transitions.easing.sharp,
           duration: theme.transitions.duration.enteringScreen,
