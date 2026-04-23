@@ -124,18 +124,39 @@ const getItemStyle = (path: string) => ({
           <Box
             sx={{
               cursor: "pointer",
-              overflow: "hidden",
               display: "flex",
               justifyContent: collapsed && !isMobile ? "center" : "flex-start",
+              alignItems: "center",
               flex: 1,
             }}
             onClick={handleLogoClick}
           >
-            <img
-              src={PrepSheetLogo}
-              alt="PrepSheet Logo"
-              style={{ width: collapsed && !isMobile ? 48 : 140, transition: "width 200ms ease" }}
-            />
+            {collapsed && !isMobile ? (
+              <Box
+                sx={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: "14px",
+                  backgroundColor: activeColor,
+                  color: "#ffffff",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: "1rem",
+                  fontWeight: 800,
+                  letterSpacing: 1,
+                  boxShadow: "0 8px 18px rgba(78, 166, 116, 0.22)",
+                }}
+              >
+                PS
+              </Box>
+            ) : (
+              <img
+                src={PrepSheetLogo}
+                alt="PrepSheet Logo"
+                style={{ width: 140, transition: "width 200ms ease" }}
+              />
+            )}
           </Box>
 
           {!isMobile ? (

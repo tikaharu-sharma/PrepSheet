@@ -1,10 +1,11 @@
 import { Box, useMediaQuery, useTheme } from "@mui/material";
 import { useState } from "react";
+import { Outlet } from "react-router-dom";
 import Navbar from "./Navbar";
 import Sidebar from "./Sidebar";
 
 interface LayoutProps{
-   children: React.ReactNode
+   children?: React.ReactNode
 }
 
 const drawerWidth = 260;
@@ -61,7 +62,7 @@ export default function AppLayout({children}: LayoutProps){
                     minHeight: "100%",
                   }}
                 >
-                  {children}
+                  {children ?? <Outlet />}
                 </Box>
             </Box>
         </Box>

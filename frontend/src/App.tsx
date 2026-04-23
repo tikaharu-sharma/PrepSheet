@@ -24,16 +24,18 @@ export default function App() {
 
         {/* Protected - Available to all authenticated users */}
         <Route element={<RequireAuth />}>
-          <Route element={<AppLayout><Home /></AppLayout>} path="/home" />
-          <Route element={<AppLayout><SalesEntry /></AppLayout>} path="/sales-entry" />
-          <Route element={<AppLayout><Reports /></AppLayout>} path="/reports" />
+          <Route element={<AppLayout />}>
+            <Route path="/home" element={<Home />} />
+            <Route path="/sales-entry" element={<SalesEntry />} />
+            <Route path="/reports" element={<Reports />} />
 
-          {/* Manager-only routes */}
-          <Route element={<RequireRole allowedRoles={["manager"]} />}>
-            <Route element={<AppLayout><Users /></AppLayout>} path="/users" />
-            <Route element={<AppLayout><Restaurants /></AppLayout>} path="/restaurants" />
-            <Route element={<AppLayout><DataVisualization /></AppLayout>} path="/visualization" />
-            <Route element={<AppLayout><Settings /></AppLayout>} path="/settings" />
+            {/* Manager-only routes */}
+            <Route element={<RequireRole allowedRoles={["manager"]} />}>
+              <Route path="/users" element={<Users />} />
+              <Route path="/restaurants" element={<Restaurants />} />
+              <Route path="/visualization" element={<DataVisualization />} />
+              <Route path="/settings" element={<Settings />} />
+            </Route>
           </Route>
         </Route>
 
