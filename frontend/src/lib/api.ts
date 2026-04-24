@@ -1,4 +1,4 @@
-import type { User } from './auth';
+import { getStoredUser, type User } from './auth';
 import type { Restaurant } from './types';
 
 export type { Restaurant };
@@ -434,8 +434,10 @@ export async function fetchSales(params?: { startDate?: string; endDate?: string
   if (params?.startDate) query.set('start_date', params.startDate);
   if (params?.endDate) query.set('end_date', params.endDate);
   if (params?.restaurantId) query.set('restaurant_id', String(params.restaurantId));
+  const user = getStoredUser();
+  const endpoint = user?.role === 'employee' ? '/sales/my' : '/sales/all';
 
-  const response = await fetch(`${API_BASE_URL}/sales/all${query.toString() ? `?${query.toString()}` : ''}`, {
+  const response = await fetch(`${API_BASE_URL}${endpoint}${query.toString() ? `?${query.toString()}` : ''}`, {
     method: 'GET',
     headers: authHeaders(),
   });
