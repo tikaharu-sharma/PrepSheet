@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 
 	"prepsheet-backend/database"
@@ -376,6 +377,58 @@ func TestGetMySales_WithDateFilter(t *testing.T) {
 	json.NewDecoder(rr.Body).Decode(&sales)
 	if len(sales) != 1 {
 		t.Fatalf("expected 1 sale in date range, got %d", len(sales))
+	}
+}
+
+func TestGetMySales_WithRestaurantFilter(t *testing.T) {
+	setupTestDB()
+	defer teardownTestDB()
+
+	managerID := createTestManager(t)
+	empID := createTestEmployee(t)
+	restaurantID1 := createManagedRestaurant(t, managerID, "Norimatsu")
+	restaurantID2 := createManagedRestaurant(t, managerID, "Kurosaki")
+	assignEmployeeToRestaurant(t, empID, restaurantID1)
+	assignEmployeeToRestaurant(t, empID, restaurantID2)
+
+	body1 := `{"date":"2025-02-01","restaurant_id":1,"lunch_head_count":10,"lunch_sale":100,"dinner_head_count":10,"dinner_sale":100,"credit_sale":0,"reji_money":200,"expenditures":[],"note":""}`
+	body1 = strings.Replace(body1, `"restaurant_id":1`, `"restaurant_id":`+intToStr(restaurantID1), 1)
+	req1 := httptest.NewRequest(http.MethodPost, "/api/sales", bytes.NewBufferString(body1))
+	req1.Header.Set("Content-Type", "application/json")
+	req1 = withEmployeeContext(req1, empID)
+	rr1 := httptest.NewRecorder()
+	AddSale(rr1, req1)
+	if rr1.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rr1.Code, rr1.Body.String())
+	}
+
+	body2 := `{"date":"2025-02-02","restaurant_id":1,"lunch_head_count":20,"lunch_sale":200,"dinner_head_count":20,"dinner_sale":200,"credit_sale":0,"reji_money":400,"expenditures":[],"note":""}`
+	body2 = strings.Replace(body2, `"restaurant_id":1`, `"restaurant_id":`+intToStr(restaurantID2), 1)
+	req2 := httptest.NewRequest(http.MethodPost, "/api/sales", bytes.NewBufferString(body2))
+	req2.Header.Set("Content-Type", "application/json")
+	req2 = withEmployeeContext(req2, empID)
+	rr2 := httptest.NewRecorder()
+	AddSale(rr2, req2)
+	if rr2.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rr2.Code, rr2.Body.String())
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/sales/my?restaurant_id="+intToStr(restaurantID1), nil)
+	req = withEmployeeContext(req, empID)
+	rr := httptest.NewRecorder()
+	GetMySales(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	var sales []models.Sale
+	json.NewDecoder(rr.Body).Decode(&sales)
+	if len(sales) != 1 {
+		t.Fatalf("expected 1 sale for filtered restaurant, got %d", len(sales))
+	}
+	if sales[0].RestaurantID != restaurantID1 {
+		t.Fatalf("expected restaurant id %d, got %d", restaurantID1, sales[0].RestaurantID)
 	}
 }
 

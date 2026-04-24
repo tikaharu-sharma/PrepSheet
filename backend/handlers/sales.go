@@ -193,6 +193,7 @@ func GetMySales(w http.ResponseWriter, r *http.Request) {
 
 	startDate := r.URL.Query().Get("start_date")
 	endDate := r.URL.Query().Get("end_date")
+	restaurantIDParam := r.URL.Query().Get("restaurant_id")
 
 	query := `
 		SELECT s.id, s.employee_id, s.restaurant_id, r.name, s.date,
@@ -206,6 +207,15 @@ func GetMySales(w http.ResponseWriter, r *http.Request) {
 	if startDate != "" && endDate != "" {
 		query += " AND s.date BETWEEN ? AND ?"
 		args = append(args, startDate, endDate)
+	}
+	if restaurantIDParam != "" {
+		restaurantID, err := strconv.Atoi(restaurantIDParam)
+		if err != nil {
+			http.Error(w, `{"error": "Invalid restaurant_id"}`, http.StatusBadRequest)
+			return
+		}
+		query += " AND s.restaurant_id = ?"
+		args = append(args, restaurantID)
 	}
 	query += " ORDER BY s.date DESC"
 
