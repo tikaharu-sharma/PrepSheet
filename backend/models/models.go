@@ -137,6 +137,7 @@ type ExpenditureInput struct {
 type UpdateSaleRequest struct {
 	ID              int                `json:"id"`
 	Date            string             `json:"date"`
+	RestaurantID    int                `json:"restaurant_id,omitempty"`
 	Restaurant      string             `json:"restaurant"`
 	LunchHeadCount  int                `json:"lunch_head_count"`
 	LunchSale       float64            `json:"lunch_sale"`

@@ -417,7 +417,15 @@ export default function Reports() {
       <Stack spacing={3}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
           <Box>
-            <Typography variant="h4" component="h1">
+            <Typography
+              variant="h4"
+              component="h1"
+              sx={{
+                fontSize: { xs: '2.4rem', sm: '3rem' },
+                lineHeight: 1.05,
+                overflowWrap: 'anywhere',
+              }}
+            >
               Reports
             </Typography>
             <Typography color="text.secondary">
@@ -425,8 +433,12 @@ export default function Reports() {
             </Typography>
           </Box>
 
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-            <FormControl sx={{ minWidth: 120 }}>
+          <Stack
+            direction={{ xs: 'column', lg: 'row' }}
+            spacing={2}
+            sx={{ width: { xs: '100%', lg: 'auto' } }}
+          >
+            <FormControl sx={{ minWidth: { xs: '100%', sm: 120 } }}>
               <InputLabel id="reports-year-select-label">Year</InputLabel>
               <Select
                 labelId="reports-year-select-label"
@@ -451,7 +463,7 @@ export default function Reports() {
                 ))}
               </Select>
             </FormControl>
-            <FormControl sx={{ minWidth: 160 }}>
+            <FormControl sx={{ minWidth: { xs: '100%', sm: 160 } }}>
               <InputLabel id="reports-month-select-label">Month</InputLabel>
               <Select
                 labelId="reports-month-select-label"
@@ -468,7 +480,7 @@ export default function Reports() {
                 ))}
               </Select>
             </FormControl>
-            <FormControl sx={{ minWidth: 260 }}>
+            <FormControl sx={{ minWidth: { xs: '100%', sm: 320 } }}>
               <InputLabel id="reports-restaurant-select-label">Restaurant</InputLabel>
               <Select
                 labelId="reports-restaurant-select-label"
@@ -484,7 +496,7 @@ export default function Reports() {
                 ))}
               </Select>
             </FormControl>
-            <FormControl sx={{ minWidth: 180 }}>
+            <FormControl sx={{ minWidth: { xs: '100%', sm: 180 } }}>
               <InputLabel id="reports-export-options-label">Export Options</InputLabel>
               <Select
                 labelId="reports-export-options-label"
@@ -513,25 +525,34 @@ export default function Reports() {
         ) : !month ? (
           <Alert severity="info">No report data is available for the selected restaurant yet.</Alert>
         ) : (
-          <Paper elevation={4} sx={{ p: 3, overflow: 'hidden' }}>
+          <Paper elevation={4} sx={{ p: { xs: 2, sm: 3 }, overflow: 'hidden' }}>
             <Stack spacing={2}>
               <Box sx={{ textAlign: 'center' }}>
-                <Typography variant="h4" sx={{ fontWeight: 700, letterSpacing: 1 }}>
+                <Typography
+                  variant="h4"
+                  sx={{
+                    fontWeight: 700,
+                    letterSpacing: { xs: 0.5, sm: 1 },
+                    fontSize: { xs: '2rem', sm: '2.5rem', md: '3rem' },
+                    lineHeight: 1.1,
+                    overflowWrap: 'anywhere',
+                  }}
+                >
                   {reportTitle}
                 </Typography>
                 <Typography color="text.secondary">{formatMonthTitle(month)}</Typography>
               </Box>
 
-              <TableContainer sx={{ overflowX: 'auto' }}>
+              <TableContainer sx={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
                 <Table
                   size="small"
                   sx={{
-                    tableLayout: 'fixed',
-                    width: '100%',
+                    minWidth: 1280,
                     '& .MuiTableCell-root': {
                       border: '1px solid #1f1f1f',
                       fontSize: '0.95rem',
                       py: 0.75,
+                      whiteSpace: 'nowrap',
                     },
                   }}
                 >
@@ -540,7 +561,7 @@ export default function Reports() {
                       <TableCell
                         rowSpan={2}
                         align="center"
-                        sx={{ fontWeight: 700, width: '11%', backgroundColor: '#ffffff' }}
+                        sx={{ fontWeight: 700, minWidth: 120, backgroundColor: '#ffffff' }}
                       >
                         DATE
                       </TableCell>
