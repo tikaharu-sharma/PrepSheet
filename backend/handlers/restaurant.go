@@ -36,11 +36,18 @@ func GetRestaurants(w http.ResponseWriter, r *http.Request) {
 	// If manager, get their restaurants; otherwise return empty
 	var rows *sql.Rows
 	if role == "manager" {
-		rows, err = database.DB.Query("SELECT id, name FROM restaurants WHERE manager_id = ? ORDER BY name", managerID)
+		rows, err = database.DB.Query(
+			"SELECT id, name, created_at FROM restaurants WHERE manager_id = ? ORDER BY datetime(created_at) DESC, name ASC",
+			managerID,
+		)
 	} else {
 		// Employees can only see actively assigned restaurants.
 		rows, err = database.DB.Query(
-			"SELECT DISTINCT r.id, r.name FROM restaurants r JOIN assignments a ON r.id = a.restaurant_id WHERE a.employee_id = ? AND a.status = 'active' ORDER BY r.name",
+			`SELECT DISTINCT r.id, r.name, r.created_at
+			 FROM restaurants r
+			 JOIN assignments a ON r.id = a.restaurant_id
+			 WHERE a.employee_id = ? AND a.status = 'active'
+			 ORDER BY datetime(r.created_at) DESC, r.name ASC`,
 			managerID,
 		)
 	}
@@ -54,7 +61,7 @@ func GetRestaurants(w http.ResponseWriter, r *http.Request) {
 	var restaurants []models.Restaurant
 	for rows.Next() {
 		var restaurant models.Restaurant
-		if err := rows.Scan(&restaurant.ID, &restaurant.Name); err != nil {
+		if err := rows.Scan(&restaurant.ID, &restaurant.Name, &restaurant.CreatedAt); err != nil {
 			http.Error(w, `{"error": "Failed to parse restaurant data"}`, http.StatusInternalServerError)
 			return
 		}
@@ -110,10 +117,15 @@ func AddRestaurant(w http.ResponseWriter, r *http.Request) {
 	}
 
 	id, _ := result.LastInsertId()
+	var restaurant models.Restaurant
+	if err := database.DB.QueryRow("SELECT id, name, created_at FROM restaurants WHERE id = ?", id).Scan(&restaurant.ID, &restaurant.Name, &restaurant.CreatedAt); err != nil {
+		http.Error(w, `{"error": "Restaurant created but failed to fetch details"}`, http.StatusInternalServerError)
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(models.Restaurant{ID: int(id), Name: req.Name})
+	json.NewEncoder(w).Encode(restaurant)
 }
 
 // UpdateRestaurant updates a restaurant name by ID (manager-owned).
@@ -168,7 +180,7 @@ func UpdateRestaurant(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var restaurant models.Restaurant
-	if err = database.DB.QueryRow("SELECT id, name FROM restaurants WHERE id = ?", req.ID).Scan(&restaurant.ID, &restaurant.Name); err != nil {
+	if err = database.DB.QueryRow("SELECT id, name, created_at FROM restaurants WHERE id = ?", req.ID).Scan(&restaurant.ID, &restaurant.Name, &restaurant.CreatedAt); err != nil {
 		http.Error(w, `{"error": "Failed to fetch updated restaurant"}`, http.StatusInternalServerError)
 		return
 	}
