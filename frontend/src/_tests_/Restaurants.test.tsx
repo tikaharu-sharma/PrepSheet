@@ -3,12 +3,19 @@ import userEvent from '@testing-library/user-event'
 import Restaurants from '../pages/Restaurants'
 import { RestaurantContext } from '../context/RestaurantContext'
 import type { RestaurantContextType } from '../context/RestaurantContext'
+import { getEmployees } from '../lib/api'
+
+vi.mock('../lib/api', () => ({
+  getEmployees: vi.fn(),
+}))
+
+const mockedGetEmployees = vi.mocked(getEmployees)
 
 function renderRestaurantsPage(overrides: Partial<RestaurantContextType> = {}) {
   const value: RestaurantContextType = {
     restaurants: [
-      { id: 1, name: 'Indian Restaurant Mina - Asakawa' },
-      { id: 2, name: 'Indian Restaurant Mina - Tobata' },
+      { id: 1, name: 'Indian Restaurant Mina - Asakawa', created_at: '2026-04-20T12:00:00Z' },
+      { id: 2, name: 'Indian Restaurant Mina - Tobata', created_at: '2026-04-19T12:00:00Z' },
     ],
     selectedRestaurant: null,
     setSelectedRestaurant: vi.fn(),
@@ -31,6 +38,19 @@ function renderRestaurantsPage(overrides: Partial<RestaurantContextType> = {}) {
 }
 
 describe('Restaurants page', () => {
+  beforeEach(() => {
+    mockedGetEmployees.mockResolvedValue([
+      {
+        id: 7,
+        name: 'Ryan Sharma',
+        email: 'ryan@example.com',
+        status: 'active',
+        restaurants: [{ id: 1, name: 'Indian Restaurant Mina - Asakawa' }],
+        created_at: '2026-04-18T09:00:00Z',
+      },
+    ] as any)
+  })
+
   it('adds a restaurant from the dialog', async () => {
     const user = userEvent.setup()
     const { context } = renderRestaurantsPage()
@@ -50,7 +70,7 @@ describe('Restaurants page', () => {
     const { context } = renderRestaurantsPage()
 
     await screen.findByText('Indian Restaurant Mina - Asakawa')
-    await user.click(screen.getAllByTitle('Edit restaurant')[0])
+    await user.click(screen.getAllByRole('button', { name: /edit /i })[0])
 
     const nameInput = screen.getByLabelText(/restaurant name\/location/i)
     expect(nameInput).toHaveValue('Indian Restaurant Mina - Asakawa')
@@ -69,7 +89,7 @@ describe('Restaurants page', () => {
     const { context } = renderRestaurantsPage()
 
     await screen.findByText('Indian Restaurant Mina - Asakawa')
-    await user.click(screen.getAllByTitle('Delete restaurant')[0])
+    await user.click(screen.getAllByRole('button', { name: /delete /i })[0])
     await user.click(screen.getByRole('button', { name: /^delete$/i }))
 
     await waitFor(() => {
