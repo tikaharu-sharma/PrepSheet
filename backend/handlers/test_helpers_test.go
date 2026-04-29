@@ -3,6 +3,7 @@ package handlers
 import (
 	"database/sql"
 	"log"
+	"testing"
 
 	"prepsheet-backend/database"
 
@@ -49,6 +50,8 @@ func setupTestDB() {
 			reji_money REAL NOT NULL DEFAULT 0,
 			note TEXT,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME,
+			updated_by INTEGER,
 			FOREIGN KEY (employee_id) REFERENCES users(id),
 			FOREIGN KEY (restaurant_id) REFERENCES restaurants(id)
 		);`,
@@ -83,4 +86,18 @@ func teardownTestDB() {
 	if database.DB != nil {
 		database.DB.Close()
 	}
+}
+
+// setupManagerUser inserts a manager user into the test DB and returns their ID.
+func setupManagerUser(t *testing.T) int {
+	t.Helper()
+	res, err := database.DB.Exec(
+		"INSERT INTO users (name, email, password, role, status) VALUES (?, ?, ?, ?, ?)",
+		"Test Manager", "manager@test.com", "hashed", "manager", "active",
+	)
+	if err != nil {
+		t.Fatalf("failed to create manager user: %v", err)
+	}
+	id, _ := res.LastInsertId()
+	return int(id)
 }
