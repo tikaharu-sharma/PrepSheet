@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"os"
 
 	"golang.org/x/crypto/bcrypt"
 	_ "modernc.org/sqlite"
@@ -32,6 +33,7 @@ func InitDB() {
 	}
 
 	createTables()
+	ensureIndexes()
 	runMigrations()
 	seedAdminUser()
 	// Run migrations again so legacy rows can be backfilled with the now-seeded manager.
@@ -39,10 +41,50 @@ func InitDB() {
 	log.Println("Database initialized successfully")
 }
 
+// ensureIndexes creates indexes on high-traffic query columns if they don't exist yet.
+func ensureIndexes() {
+	indexes := []struct {
+		name string
+		sql  string
+	}{
+		{
+			"idx_sales_restaurant_date",
+			"CREATE INDEX IF NOT EXISTS idx_sales_restaurant_date ON sales(restaurant_id, date)",
+		},
+		{
+			"idx_sales_employee_date",
+			"CREATE INDEX IF NOT EXISTS idx_sales_employee_date ON sales(employee_id, date)",
+		},
+		{
+			"idx_users_role",
+			"CREATE INDEX IF NOT EXISTS idx_users_role ON users(role)",
+		},
+		{
+			"idx_sales_unique_restaurant_date",
+			"CREATE UNIQUE INDEX IF NOT EXISTS idx_sales_unique_restaurant_date ON sales(restaurant_id, date)",
+		},
+	}
+	for _, idx := range indexes {
+		if _, err := DB.Exec(idx.sql); err != nil {
+			log.Printf("Warning: failed to create index %s: %v", idx.name, err)
+		}
+	}
+}
+
 func seedAdminUser() {
-	const userName = "admin"
-	const userEmail = "admin@example.com"
-	const userPassword = "admin"
+	userName := os.Getenv("ADMIN_NAME")
+	if userName == "" {
+		userName = "admin"
+	}
+	userEmail := os.Getenv("ADMIN_EMAIL")
+	if userEmail == "" {
+		userEmail = "admin@example.com"
+	}
+	userPassword := os.Getenv("ADMIN_PASSWORD")
+	if userPassword == "" {
+		log.Println("WARNING: ADMIN_PASSWORD env var is not set. Using insecure default — set ADMIN_PASSWORD in production.")
+		userPassword = "admin"
+	}
 	const userRole = "manager"
 
 	var exists int
@@ -89,7 +131,36 @@ func runMigrations() {
 		log.Printf("Migration warning (backfill restaurants.manager_id): %v", err)
 	}
 
+	if err := addSalesAuditColumnsIfMissing(); err != nil {
+		log.Printf("Migration warning (sales audit columns): %v", err)
+	}
+
 	log.Println("Migrations completed")
+}
+
+func addSalesAuditColumnsIfMissing() error {
+	hasUpdatedAt, err := columnExists("sales", "updated_at")
+	if err != nil {
+		return err
+	}
+	if !hasUpdatedAt {
+		log.Println("Adding updated_at column to sales table...")
+		if _, err := DB.Exec("ALTER TABLE sales ADD COLUMN updated_at DATETIME"); err != nil {
+			return err
+		}
+	}
+
+	hasUpdatedBy, err := columnExists("sales", "updated_by")
+	if err != nil {
+		return err
+	}
+	if !hasUpdatedBy {
+		log.Println("Adding updated_by column to sales table...")
+		if _, err := DB.Exec("ALTER TABLE sales ADD COLUMN updated_by INTEGER REFERENCES users(id)"); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func addUsersManagerIDColumnIfMissing() error {
