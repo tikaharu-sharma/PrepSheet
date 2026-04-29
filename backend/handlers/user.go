@@ -3,7 +3,9 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
@@ -14,8 +16,14 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// JWTSecret is the signing key for JWT tokens.
-var JWTSecret = []byte("prepsheet-secret-key-change-in-production")
+// JWTSecret is the signing key for JWT tokens, loaded from the JWT_SECRET environment variable.
+var JWTSecret = func() []byte {
+	if s := os.Getenv("JWT_SECRET"); s != "" {
+		return []byte(s)
+	}
+	log.Println("WARNING: JWT_SECRET env var is not set. Using insecure default — set JWT_SECRET in production.")
+	return []byte("prepsheet-secret-key-change-in-production")
+}()
 
 func getStoredPasswordHash(userID int) (string, error) {
 	var passwordHash string
