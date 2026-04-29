@@ -14,8 +14,10 @@ import (
 func TestGetRestaurants_Empty(t *testing.T) {
 	setupTestDB()
 	defer teardownTestDB()
+	managerID := setupManagerUser(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/restaurants", nil)
+	req = requestWithUserID(req, managerID)
 	rr := httptest.NewRecorder()
 	GetRestaurants(rr, req)
 
@@ -33,10 +35,12 @@ func TestGetRestaurants_Empty(t *testing.T) {
 func TestAddRestaurant_Success(t *testing.T) {
 	setupTestDB()
 	defer teardownTestDB()
+	managerID := setupManagerUser(t)
 
 	body := `{"name":"Test Restaurant"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/restaurants/add", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
+	req = requestWithUserID(req, managerID)
 	rr := httptest.NewRecorder()
 
 	AddRestaurant(rr, req)
@@ -71,10 +75,12 @@ func TestAddRestaurant_MethodNotAllowed(t *testing.T) {
 func TestAddRestaurant_EmptyName(t *testing.T) {
 	setupTestDB()
 	defer teardownTestDB()
+	managerID := setupManagerUser(t)
 
 	body := `{"name":""}`
 	req := httptest.NewRequest(http.MethodPost, "/api/restaurants/add", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
+	req = requestWithUserID(req, managerID)
 	rr := httptest.NewRecorder()
 
 	AddRestaurant(rr, req)
@@ -87,15 +93,18 @@ func TestAddRestaurant_EmptyName(t *testing.T) {
 func TestAddRestaurant_Duplicate(t *testing.T) {
 	setupTestDB()
 	defer teardownTestDB()
+	managerID := setupManagerUser(t)
 
 	body := `{"name":"Unique Place"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/restaurants/add", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
+	req = requestWithUserID(req, managerID)
 	AddRestaurant(httptest.NewRecorder(), req)
 
 	// Duplicate
 	req2 := httptest.NewRequest(http.MethodPost, "/api/restaurants/add", bytes.NewBufferString(body))
 	req2.Header.Set("Content-Type", "application/json")
+	req2 = requestWithUserID(req2, managerID)
 	rr := httptest.NewRecorder()
 	AddRestaurant(rr, req2)
 
@@ -107,11 +116,13 @@ func TestAddRestaurant_Duplicate(t *testing.T) {
 func TestDeleteRestaurant_Success(t *testing.T) {
 	setupTestDB()
 	defer teardownTestDB()
+	managerID := setupManagerUser(t)
 
-	// Create a restaurant
-	database.DB.Exec("INSERT INTO restaurants (name) VALUES (?)", "To Delete")
+	// Create a restaurant owned by the manager
+	database.DB.Exec("INSERT INTO restaurants (name, manager_id) VALUES (?, ?)", "To Delete", managerID)
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/restaurants/delete?id=1", nil)
+	req = requestWithUserID(req, managerID)
 	rr := httptest.NewRecorder()
 	DeleteRestaurant(rr, req)
 
@@ -136,8 +147,10 @@ func TestDeleteRestaurant_MethodNotAllowed(t *testing.T) {
 func TestDeleteRestaurant_MissingID(t *testing.T) {
 	setupTestDB()
 	defer teardownTestDB()
+	managerID := setupManagerUser(t)
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/restaurants/delete", nil)
+	req = requestWithUserID(req, managerID)
 	rr := httptest.NewRecorder()
 	DeleteRestaurant(rr, req)
 
@@ -149,11 +162,13 @@ func TestDeleteRestaurant_MissingID(t *testing.T) {
 func TestGetRestaurants_WithData(t *testing.T) {
 	setupTestDB()
 	defer teardownTestDB()
+	managerID := setupManagerUser(t)
 
-	database.DB.Exec("INSERT INTO restaurants (name) VALUES (?)", "Alpha")
-	database.DB.Exec("INSERT INTO restaurants (name) VALUES (?)", "Beta")
+	database.DB.Exec("INSERT INTO restaurants (name, manager_id) VALUES (?, ?)", "Alpha", managerID)
+	database.DB.Exec("INSERT INTO restaurants (name, manager_id) VALUES (?, ?)", "Beta", managerID)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/restaurants", nil)
+	req = requestWithUserID(req, managerID)
 	rr := httptest.NewRecorder()
 	GetRestaurants(rr, req)
 
@@ -170,19 +185,21 @@ func TestGetRestaurants_WithData(t *testing.T) {
 
 // --- Assignment Tests ---
 
-func setupAssignmentData(t *testing.T) {
+func setupAssignmentData(t *testing.T, managerID int) {
 	t.Helper()
-	// Create a user and a restaurant for assignment tests
-	database.DB.Exec("INSERT INTO users (name, email, password, role, status) VALUES (?, ?, ?, ?, ?)",
-		"Assign Emp", "assign@example.com", "hashed", "employee", "active")
-	database.DB.Exec("INSERT INTO restaurants (name) VALUES (?)", "Assign Resto")
+	// Create an employee and a restaurant linked to the manager
+	database.DB.Exec("INSERT INTO users (name, email, password, role, status, manager_id) VALUES (?, ?, ?, ?, ?, ?)",
+		"Assign Emp", "assign@example.com", "hashed", "employee", "active", managerID)
+	database.DB.Exec("INSERT INTO restaurants (name, manager_id) VALUES (?, ?)", "Assign Resto", managerID)
 }
 
 func TestGetAssignments_Empty(t *testing.T) {
 	setupTestDB()
 	defer teardownTestDB()
+	managerID := setupManagerUser(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/assignments", nil)
+	req = requestWithUserID(req, managerID)
 	rr := httptest.NewRecorder()
 	GetAssignments(rr, req)
 
@@ -200,11 +217,13 @@ func TestGetAssignments_Empty(t *testing.T) {
 func TestAddAssignment_Success(t *testing.T) {
 	setupTestDB()
 	defer teardownTestDB()
-	setupAssignmentData(t)
+	managerID := setupManagerUser(t)
+	setupAssignmentData(t, managerID)
 
-	body := `{"restaurant_id":1,"employee_id":1,"status":"active"}`
+	body := `{"restaurant_id":1,"employee_id":2,"status":"active"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/assignments/add", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
+	req = requestWithUserID(req, managerID)
 	rr := httptest.NewRecorder()
 
 	AddAssignment(rr, req)
@@ -230,10 +249,12 @@ func TestAddAssignment_MethodNotAllowed(t *testing.T) {
 func TestAddAssignment_MissingFields(t *testing.T) {
 	setupTestDB()
 	defer teardownTestDB()
+	managerID := setupManagerUser(t)
 
 	body := `{"restaurant_id":0,"employee_id":0}`
 	req := httptest.NewRequest(http.MethodPost, "/api/assignments/add", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
+	req = requestWithUserID(req, managerID)
 	rr := httptest.NewRecorder()
 
 	AddAssignment(rr, req)
@@ -246,11 +267,13 @@ func TestAddAssignment_MissingFields(t *testing.T) {
 func TestAddAssignment_DefaultStatus(t *testing.T) {
 	setupTestDB()
 	defer teardownTestDB()
-	setupAssignmentData(t)
+	managerID := setupManagerUser(t)
+	setupAssignmentData(t, managerID)
 
-	body := `{"restaurant_id":1,"employee_id":1}`
+	body := `{"restaurant_id":1,"employee_id":2}`
 	req := httptest.NewRequest(http.MethodPost, "/api/assignments/add", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
+	req = requestWithUserID(req, managerID)
 	rr := httptest.NewRecorder()
 	AddAssignment(rr, req)
 
@@ -262,14 +285,16 @@ func TestAddAssignment_DefaultStatus(t *testing.T) {
 func TestUpdateAssignment_Success(t *testing.T) {
 	setupTestDB()
 	defer teardownTestDB()
-	setupAssignmentData(t)
+	managerID := setupManagerUser(t)
+	setupAssignmentData(t, managerID)
 
 	// Create an assignment first
-	database.DB.Exec("INSERT INTO assignments (restaurant_id, employee_id, status) VALUES (?, ?, ?)", 1, 1, "active")
+	database.DB.Exec("INSERT INTO assignments (restaurant_id, employee_id, status) VALUES (?, ?, ?)", 1, 2, "active")
 
-	body := `{"id":1,"restaurant_id":1,"employee_id":1,"status":"inactive"}`
+	body := `{"id":1,"restaurant_id":1,"employee_id":2,"status":"inactive"}`
 	req := httptest.NewRequest(http.MethodPut, "/api/assignments/update", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
+	req = requestWithUserID(req, managerID)
 	rr := httptest.NewRecorder()
 
 	UpdateAssignment(rr, req)
@@ -295,11 +320,13 @@ func TestUpdateAssignment_MethodNotAllowed(t *testing.T) {
 func TestDeleteAssignment_Success(t *testing.T) {
 	setupTestDB()
 	defer teardownTestDB()
-	setupAssignmentData(t)
+	managerID := setupManagerUser(t)
+	setupAssignmentData(t, managerID)
 
-	database.DB.Exec("INSERT INTO assignments (restaurant_id, employee_id, status) VALUES (?, ?, ?)", 1, 1, "active")
+	database.DB.Exec("INSERT INTO assignments (restaurant_id, employee_id, status) VALUES (?, ?, ?)", 1, 2, "active")
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/assignments/delete?id=1", nil)
+	req = requestWithUserID(req, managerID)
 	rr := httptest.NewRecorder()
 	DeleteAssignment(rr, req)
 
@@ -324,8 +351,10 @@ func TestDeleteAssignment_MethodNotAllowed(t *testing.T) {
 func TestDeleteAssignment_MissingID(t *testing.T) {
 	setupTestDB()
 	defer teardownTestDB()
+	managerID := setupManagerUser(t)
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/assignments/delete", nil)
+	req = requestWithUserID(req, managerID)
 	rr := httptest.NewRecorder()
 	DeleteAssignment(rr, req)
 
@@ -337,11 +366,13 @@ func TestDeleteAssignment_MissingID(t *testing.T) {
 func TestGetAssignments_WithData(t *testing.T) {
 	setupTestDB()
 	defer teardownTestDB()
-	setupAssignmentData(t)
+	managerID := setupManagerUser(t)
+	setupAssignmentData(t, managerID)
 
-	database.DB.Exec("INSERT INTO assignments (restaurant_id, employee_id, status) VALUES (?, ?, ?)", 1, 1, "active")
+	database.DB.Exec("INSERT INTO assignments (restaurant_id, employee_id, status) VALUES (?, ?, ?)", 1, 2, "active")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/assignments", nil)
+	req = requestWithUserID(req, managerID)
 	rr := httptest.NewRecorder()
 	GetAssignments(rr, req)
 
