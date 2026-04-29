@@ -110,6 +110,8 @@ type Sale struct {
 	Expenditures    []Expenditure `json:"expenditures"`
 	Note            string        `json:"note"`
 	CreatedAt       string        `json:"created_at,omitempty"`
+	UpdatedAt       string        `json:"updated_at,omitempty"`
+	UpdatedBy       int           `json:"updated_by,omitempty"`
 }
 
 // SaleRequest is the payload for adding a new sale entry.
