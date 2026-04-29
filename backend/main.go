@@ -17,6 +17,9 @@ func main() {
 	// Rate limiter: 10 attempts per 15 minutes for auth endpoints
 	authLimiter := middleware.NewRateLimiter(10, 15*time.Minute)
 
+	// Rate limiter: 100 requests per minute for all authenticated API endpoints
+	apiLimiter := middleware.NewRateLimiter(100, time.Minute)
+
 	// Create a new ServeMux
 	mux := http.NewServeMux()
 
@@ -25,35 +28,35 @@ func main() {
 	mux.HandleFunc("/api/login", authLimiter.Limit(middleware.LimitBody(handlers.Login)))
 
 	// ─── Restaurant routes ──────────────────────────────────────────────
-	mux.HandleFunc("/api/restaurants", middleware.AuthMiddleware(middleware.LimitBody(handlers.GetRestaurants)))
-	mux.HandleFunc("/api/restaurants/add", middleware.AuthMiddleware(middleware.LimitBody(handlers.AddRestaurant)))
-	mux.HandleFunc("/api/restaurants/update", middleware.AuthMiddleware(middleware.LimitBody(handlers.UpdateRestaurant)))
-	mux.HandleFunc("/api/restaurants/delete", middleware.AuthMiddleware(middleware.LimitBody(handlers.DeleteRestaurant)))
+	mux.HandleFunc("/api/restaurants", apiLimiter.Limit(middleware.AuthMiddleware(middleware.LimitBody(handlers.GetRestaurants))))
+	mux.HandleFunc("/api/restaurants/add", apiLimiter.Limit(middleware.AuthMiddleware(middleware.LimitBody(handlers.AddRestaurant))))
+	mux.HandleFunc("/api/restaurants/update", apiLimiter.Limit(middleware.AuthMiddleware(middleware.LimitBody(handlers.UpdateRestaurant))))
+	mux.HandleFunc("/api/restaurants/delete", apiLimiter.Limit(middleware.AuthMiddleware(middleware.LimitBody(handlers.DeleteRestaurant))))
 
 	// ─── Sales routes ───────────────────────────────────────────────────
-	mux.HandleFunc("/api/sales", middleware.AuthMiddleware(middleware.LimitBody(handlers.AddSale)))
-	mux.HandleFunc("/api/sales/my", middleware.AuthMiddleware(middleware.LimitBody(handlers.GetMySales)))
-	mux.HandleFunc("/api/sales/all", middleware.AuthMiddleware(middleware.LimitBody(handlers.GetSales)))
-	mux.HandleFunc("/api/sales/update", middleware.AuthMiddleware(middleware.LimitBody(handlers.UpdateSale)))
-	mux.HandleFunc("/api/sales/delete", middleware.AuthMiddleware(middleware.LimitBody(handlers.DeleteSale)))
+	mux.HandleFunc("/api/sales", apiLimiter.Limit(middleware.AuthMiddleware(middleware.LimitBody(handlers.AddSale))))
+	mux.HandleFunc("/api/sales/my", apiLimiter.Limit(middleware.AuthMiddleware(middleware.LimitBody(handlers.GetMySales))))
+	mux.HandleFunc("/api/sales/all", apiLimiter.Limit(middleware.AuthMiddleware(middleware.LimitBody(handlers.GetSales))))
+	mux.HandleFunc("/api/sales/update", apiLimiter.Limit(middleware.AuthMiddleware(middleware.LimitBody(handlers.UpdateSale))))
+	mux.HandleFunc("/api/sales/delete", apiLimiter.Limit(middleware.AuthMiddleware(middleware.LimitBody(handlers.DeleteSale))))
 
 	// ─── Reports ────────────────────────────────────────────────────────
-	mux.HandleFunc("/api/reports/monthly", middleware.AuthMiddleware(middleware.LimitBody(handlers.GetMonthlyReport)))
+	mux.HandleFunc("/api/reports/monthly", apiLimiter.Limit(middleware.AuthMiddleware(middleware.LimitBody(handlers.GetMonthlyReport))))
 
 	// ─── User management routes ─────────────────────────────────────────
-	mux.HandleFunc("/api/users", middleware.AuthMiddleware(middleware.LimitBody(handlers.GetUsers)))
-	mux.HandleFunc("/api/users/create", middleware.AuthMiddleware(middleware.LimitBody(handlers.CreateEmployee)))
-	mux.HandleFunc("/api/users/update", middleware.AuthMiddleware(middleware.LimitBody(handlers.UpdateEmployee)))
-	mux.HandleFunc("/api/users/delete", middleware.AuthMiddleware(middleware.LimitBody(handlers.DeleteEmployee)))
-	mux.HandleFunc("/api/users/status", middleware.AuthMiddleware(middleware.LimitBody(handlers.UpdateUserStatus)))
-	mux.HandleFunc("/api/users/verify-password", middleware.AuthMiddleware(middleware.LimitBody(handlers.VerifyPassword)))
-	mux.HandleFunc("/api/users/change-password", middleware.AuthMiddleware(middleware.LimitBody(handlers.ChangePassword)))
+	mux.HandleFunc("/api/users", apiLimiter.Limit(middleware.AuthMiddleware(middleware.LimitBody(handlers.GetUsers))))
+	mux.HandleFunc("/api/users/create", apiLimiter.Limit(middleware.AuthMiddleware(middleware.LimitBody(handlers.CreateEmployee))))
+	mux.HandleFunc("/api/users/update", apiLimiter.Limit(middleware.AuthMiddleware(middleware.LimitBody(handlers.UpdateEmployee))))
+	mux.HandleFunc("/api/users/delete", apiLimiter.Limit(middleware.AuthMiddleware(middleware.LimitBody(handlers.DeleteEmployee))))
+	mux.HandleFunc("/api/users/status", apiLimiter.Limit(middleware.AuthMiddleware(middleware.LimitBody(handlers.UpdateUserStatus))))
+	mux.HandleFunc("/api/users/verify-password", apiLimiter.Limit(middleware.AuthMiddleware(middleware.LimitBody(handlers.VerifyPassword))))
+	mux.HandleFunc("/api/users/change-password", apiLimiter.Limit(middleware.AuthMiddleware(middleware.LimitBody(handlers.ChangePassword))))
 
 	// ─── Assignment routes ──────────────────────────────────────────────
-	mux.HandleFunc("/api/assignments", middleware.AuthMiddleware(middleware.LimitBody(handlers.GetAssignments)))
-	mux.HandleFunc("/api/assignments/add", middleware.AuthMiddleware(middleware.LimitBody(handlers.AddAssignment)))
-	mux.HandleFunc("/api/assignments/update", middleware.AuthMiddleware(middleware.LimitBody(handlers.UpdateAssignment)))
-	mux.HandleFunc("/api/assignments/delete", middleware.AuthMiddleware(middleware.LimitBody(handlers.DeleteAssignment)))
+	mux.HandleFunc("/api/assignments", apiLimiter.Limit(middleware.AuthMiddleware(middleware.LimitBody(handlers.GetAssignments))))
+	mux.HandleFunc("/api/assignments/add", apiLimiter.Limit(middleware.AuthMiddleware(middleware.LimitBody(handlers.AddAssignment))))
+	mux.HandleFunc("/api/assignments/update", apiLimiter.Limit(middleware.AuthMiddleware(middleware.LimitBody(handlers.UpdateAssignment))))
+	mux.HandleFunc("/api/assignments/delete", apiLimiter.Limit(middleware.AuthMiddleware(middleware.LimitBody(handlers.DeleteAssignment))))
 
 	// Health check endpoint
 	mux.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
