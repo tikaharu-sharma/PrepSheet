@@ -8,6 +8,8 @@ import {
   getAssignments,
   getEmployees,
   updateEmployee,
+  addAssignment,
+  deleteAssignment,
 } from '../lib/api'
 
 vi.mock('../lib/api', async (importOriginal) => {
@@ -20,6 +22,8 @@ vi.mock('../lib/api', async (importOriginal) => {
     deleteEmployee: vi.fn(),
     getAssignments: vi.fn(),
     fetchRestaurants: vi.fn(),
+    addAssignment: vi.fn(),
+    deleteAssignment: vi.fn(),
   }
 })
 
@@ -29,6 +33,8 @@ const mockedUpdateEmployee = vi.mocked(updateEmployee)
 const mockedDeleteEmployee = vi.mocked(deleteEmployee)
 const mockedGetAssignments = vi.mocked(getAssignments)
 const mockedFetchRestaurants = vi.mocked(fetchRestaurants)
+const mockedAddAssignment = vi.mocked(addAssignment)
+const mockedDeleteAssignment = vi.mocked(deleteAssignment)
 
 const employees = [
   {
@@ -67,6 +73,8 @@ describe('Users page', () => {
     mockedCreateEmployee.mockResolvedValue({ id: 11, message: 'created' })
     mockedUpdateEmployee.mockResolvedValue({ message: 'updated' })
     mockedDeleteEmployee.mockResolvedValue({ message: 'deleted' })
+    mockedAddAssignment.mockResolvedValue({ id: 200, message: 'assigned' })
+    mockedDeleteAssignment.mockResolvedValue({ message: 'deleted' })
     vi.spyOn(window, 'confirm').mockReturnValue(true)
   })
 
@@ -134,5 +142,32 @@ describe('Users page', () => {
     await waitFor(() => {
       expect(mockedDeleteEmployee).toHaveBeenCalledWith(10)
     })
+  })
+
+  it('assigns a restaurant to an employee', async () => {
+    const user = userEvent.setup()
+    render(<Users />)
+
+    await screen.findByText('John Employee')
+
+    await user.click(screen.getByRole('button', { name: /assign restaurant/i }))
+    await user.click(screen.getByText('Indian Restaurant Mina - Tobata'))
+    await user.click(screen.getByRole('button', { name: /^assign$/i }))
+
+    await waitFor(() => {
+      expect(mockedAddAssignment).toHaveBeenCalledWith(2, 10)
+    })
+  })
+
+  it('filters employees using search input', async () => {
+    const user = userEvent.setup()
+    render(<Users />)
+
+    await screen.findByText('John Employee')
+
+    const search = screen.getByPlaceholderText(/search employees/i)
+    await user.type(search, 'john')
+
+    expect(screen.getByText('John Employee')).toBeInTheDocument()
   })
 })

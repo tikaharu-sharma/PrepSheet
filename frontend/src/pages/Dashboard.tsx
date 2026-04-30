@@ -14,7 +14,14 @@ import SalesTrendChart from "../components/dashboard/SalesTrendChart";
 import { useRestaurant } from "../context/useRestaurant";
 import type { Restaurant } from "../lib/types";
 import { fetchSales, type SaleRecord } from "../lib/api";
-
+import {
+  getMonthDateRange,
+  shiftMonth,
+  getAvailablePeriods,
+  getDefaultPeriod,
+  sumSales,
+} from "../lib/dashboardUtils";
+/*
 const getCurrentMonth = () => new Date().toISOString().slice(0, 7);
 const MONTH_LABELS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
@@ -33,6 +40,7 @@ const shiftMonth = (month: string, offset: number) => {
   const date = new Date(year, monthValue - 1 + offset, 1);
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 };
+*/
 
 const formatMonthLabel = (month: string) => {
   const [year, monthValue] = month.split("-").map(Number);
@@ -43,6 +51,7 @@ const formatMonthLabel = (month: string) => {
   }).format(new Date(Date.UTC(year, monthValue - 1, 1)));
 };
 
+/*
 const getAvailablePeriods = (sales: SaleRecord[]) =>
   Array.from(new Set(sales.map((sale) => sale.date.slice(0, 7)))).sort((left, right) => right.localeCompare(left));
 
@@ -54,7 +63,7 @@ const getDefaultPeriod = (periods: string[]) => {
 
   return periods[0] ?? "";
 };
-
+*/
 const initialSummary: DashboardSummaryData = {
   totalSales: 0,
   lunchSales: 0,
@@ -63,7 +72,7 @@ const initialSummary: DashboardSummaryData = {
   previousLunchSales: 0,
   previousDinnerSales: 0,
 };
-
+/*
 const sumSales = (entries: SaleRecord[]) =>
   entries.reduce(
     (acc, sale) => {
@@ -73,7 +82,7 @@ const sumSales = (entries: SaleRecord[]) =>
       return acc;
     },
     { total: 0, lunch: 0, dinner: 0 }
-  );
+  );*/
 
 export default function Dashboard() {
   const { restaurants } = useRestaurant();
