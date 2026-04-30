@@ -6,6 +6,199 @@
 - Sampada Sharma
 - Sahith Reddy Gopidi
 - Akshay Jaidi
+
+# Frontend
+
+## Sprint Goal
+
+Complete the remaining frontend integrations, improve usability across manager and employee workflows, and add automated test coverage for newly implemented UI behavior.
+
+---
+
+## Sprint 4 Work Completed
+
+### 1. Login Page Redesign and UX Improvements
+
+The login page was redesigned into a polished two-column layout with updated branding, clearer copy, and better responsiveness. Validation and interaction handling were also improved so the form now gives immediate feedback for empty fields, supports password visibility toggling, clears stale values after failed login attempts, and navigates correctly after successful authentication.
+
+- **Files:** `frontend/src/pages/Login.tsx`, `frontend/src/_tests_/Login.test.tsx`, `frontend/cypress/e2e/login.spec.ts`
+
+### 2. Dashboard Filters, Summary View, and Trend Visualization
+
+The dashboard was upgraded from a static view into a restaurant-aware reporting surface. It now:
+
+- loads sales for the selected restaurant
+- derives available year/month filter options from real sales data
+- shows current-month summary cards with comparison against the previous month
+- renders a 7-month sales trend chart
+- handles loading, empty-data, and API-error states cleanly
+
+The dashboard data logic was also extracted into reusable helpers so the date-period and aggregation behavior could be unit tested independently.
+
+- **Files:** `frontend/src/pages/Dashboard.tsx`, `frontend/src/lib/dashboardUtils.ts`, `frontend/src/components/dashboard/*`
+
+### 3. Reports Page Filtering and Export Improvements
+
+The reports page was updated to match the dashboard’s restaurant-aware filtering model. Managers can now view only valid years and months for the selected restaurant, inspect day-level report details, and use the report export functionality more reliably. Error handling and test coverage were added around the updated reporting flow.
+
+- **Files:** `frontend/src/pages/Reports.tsx`, `frontend/src/lib/monthlyReportExport.ts`, `frontend/src/_tests_/Reports.test.tsx`
+
+### 4. Responsive Navigation and Sidebar Collapse
+
+The application shell was refined for desktop and mobile usage. The sidebar now supports collapse/expand behavior on larger screens, responsive drawer behavior on smaller screens, and layout fixes that prevent content breakage across screen sizes. Navbar and sidebar behavior were adjusted so authenticated navigation remains usable across all pages.
+
+- **Files:** `frontend/src/components/AppLayout.tsx`, `frontend/src/components/Sidebar.tsx`, `frontend/src/components/Navbar.tsx`
+
+### 5. Restaurants and Users Management Integration
+
+The manager-facing administration pages were completed and tested:
+
+- Restaurants page supports create, rename, and delete flows against the backend API
+- Users page supports employee creation, editing, deletion, restaurant assignment, and search filtering
+- role-based access and authenticated page flow were verified through tests
+
+- **Files:** `frontend/src/pages/Restaurants.tsx`, `frontend/src/pages/Users.tsx`, `frontend/src/features/*`, `frontend/src/_tests_/Restaurants.test.tsx`, `frontend/src/_tests_/Users.test.tsx`, `frontend/src/_tests_/guards.test.tsx`
+
+### 6. Settings Password Change Flow
+
+The settings page now includes a multi-step password change flow for managers. It verifies the current password before allowing the update, validates new-password confirmation, handles failure states, and logs the user out after a successful password change so the new credentials take effect cleanly.
+
+- **Files:** `frontend/src/pages/Settings.tsx`, `frontend/src/_tests_/Settings.test.tsx`
+
+### 7. Data Visualization and Sales Entry Stability
+
+The frontend now includes a data visualization page for comparing restaurant sales data, alongside continued stabilization of the sales-entry workflow. Validation, dynamic expenditure rows, success handling, and backend error display were all covered with automated tests to ensure the entry flow remains dependable.
+
+- **Files:** `frontend/src/pages/DataVisualization.tsx`, `frontend/src/pages/SalesEntry.tsx`, `frontend/src/_tests_/DataVisualization.test.tsx`, `frontend/src/_tests_/SalesEntry.test.tsx`
+
+### 8. Frontend Test Expansion
+
+Frontend automated coverage was expanded substantially during Sprint 4. New tests now cover:
+
+- login form behavior
+- route guards and auth session helpers
+- dashboard helper utilities
+- dashboard rendering after authenticated data load
+- reports filtering and report-detail interactions
+- sales entry validation and submission behavior
+- users and restaurants CRUD interactions
+- password change behavior
+- Cypress login smoke and interaction flows
+
+This work ensures new UI behavior introduced in Sprint 4 is backed by repeatable automated checks.
+
+---
+
+## Frontend Unit Tests
+
+All frontend unit tests pass. Total: **46 tests** across **11** test files.
+
+### `frontend/src/_tests_/Dashboard.test.tsx` — 1 test
+
+- `renders dashboard content for a logged-in restaurant after sales load`
+
+### `frontend/src/_tests_/DataVisualization.test.tsx` — 4 tests
+
+- `shows loading state initially`
+- `renders data correctly after fetch`
+- `shows empty state when no data`
+- `shows error state when API fails`
+
+### `frontend/src/_tests_/Login.test.tsx` — 4 tests
+
+- `shows a validation error when email and password are empty`
+- `toggles password visibility`
+- `clears both inputs and shows an error when login fails`
+- `stores the session and navigates home when login succeeds`
+
+### `frontend/src/_tests_/Reports.test.tsx` — 5 tests
+
+- `renders the monthly grid with the accountant-style columns`
+- `refetches reports for a selected restaurant`
+- `shows only available years and months for the selected restaurant`
+- `opens a day detail popup when a report date is clicked`
+- `shows an error state when report loading fails`
+
+### `frontend/src/_tests_/Restaurants.test.tsx` — 3 tests
+
+- `adds a restaurant from the dialog`
+- `opens edit mode with the existing restaurant name and saves the update`
+- `deletes a restaurant after confirmation`
+
+### `frontend/src/_tests_/SalesEntry.test.tsx` — 4 tests
+
+- `shows validation errors for missing required sales fields`
+- `adds and removes an expenditure row`
+- `submits a valid sales entry and shows a success message`
+- `shows backend submit errors such as duplicate-day conflicts`
+
+### `frontend/src/_tests_/Settings.test.tsx` — 6 tests
+
+- `shows validation error when current password is empty`
+- `toggles password visibility`
+- `moves to change step when verification succeeds`
+- `shows error when verification fails`
+- `successfully changes password and navigates to login`
+- `shows mismatch error for new passwords`
+
+### `frontend/src/_tests_/Users.test.tsx` — 5 tests
+
+- `creates a new employee with selected restaurants`
+- `edits an employee and submits the updated fields`
+- `deletes an employee after confirmation`
+- `assigns a restaurant to an employee`
+- `filters employees using search input`
+
+### `frontend/src/_tests_/auth.test.ts` — 2 tests
+
+- `stores the token and user session`
+- `clears auth and cached restaurant state on logout`
+
+### `frontend/src/_tests_/dashboardUtils.test.ts` — 7 tests
+
+- `returns correct start and end date`
+- `shifts forward correctly`
+- `shifts backward across year`
+- `returns sorted unique months`
+- `returns first period if current month not included`
+- `sums sales correctly`
+- `handles empty array`
+
+### `frontend/src/_tests_/guards.test.tsx` — 5 tests
+
+- `RequireAuth redirects unauthenticated users to login`
+- `RequireAuth renders protected routes for authenticated users`
+- `RequireRole redirects unauthenticated users to login`
+- `RequireRole redirects authenticated users with the wrong role to home`
+- `RequireRole renders the route for allowed roles`
+
+---
+
+## Cypress Tests
+
+Frontend end-to-end coverage currently includes **7 Cypress tests** in `frontend/cypress/e2e/login.spec.ts`.
+
+- `should display login form correctly`
+- `should show error if fields are empty`
+- `allows typing in the input fields`
+- `toggles password visibility`
+- `toggles password visibility back and forth`
+- `shows error for invalid credentials`
+- `submits form when fields are filled`
+
+---
+
+## Frontend Test Results
+
+```
+frontend unit tests: 11 files passed, 46 tests passed
+frontend Cypress tests: 7 tests implemented
+```
+
+All frontend unit tests pass. The Cypress suite for login behavior is included in the repository and can be run with `npm run cypress:run` from `frontend/`.
+
+---
+
 # Backend 
 ## Sprint Goal
 

@@ -111,7 +111,7 @@ export default function Dashboard() {
           const monthValue = period.slice(5, 7);
           return {
             value: monthValue,
-            label: MONTH_LABELS[Number(monthValue) - 1] ?? monthValue,
+            label: formatMonthLabel(period),
           };
         }),
     [availablePeriods, selectedYear]
