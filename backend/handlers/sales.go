@@ -144,7 +144,8 @@ func GetSales(w http.ResponseWriter, r *http.Request) {
 	query := `
 		SELECT s.id, s.employee_id, s.restaurant_id, r.name, s.date,
 		       s.lunch_head_count, s.lunch_sale, s.dinner_head_count, s.dinner_sale,
-		       s.credit_sale, s.reji_money, COALESCE(s.note, ''), s.created_at
+		       s.credit_sale, s.reji_money, COALESCE(s.note, ''), s.created_at,
+		       COALESCE(s.updated_at, ''), COALESCE(s.updated_by, 0)
 		FROM sales s
 		JOIN restaurants r ON s.restaurant_id = r.id
 		WHERE r.manager_id = ?`
@@ -178,9 +179,17 @@ func GetSales(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Load expenditures for each sale
-	for i := range sales {
-		sales[i].Expenditures, _ = getExpenditures(sales[i].ID)
+	// Load expenditures for all sales in a single query
+	if len(sales) > 0 {
+		saleIDs := make([]int, len(sales))
+		for i, s := range sales {
+			saleIDs[i] = s.ID
+		}
+		if expMap, err := getExpendituresForSales(saleIDs); err == nil {
+			for i := range sales {
+				sales[i].Expenditures = expMap[sales[i].ID]
+			}
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -198,7 +207,8 @@ func GetMySales(w http.ResponseWriter, r *http.Request) {
 	query := `
 		SELECT s.id, s.employee_id, s.restaurant_id, r.name, s.date,
 		       s.lunch_head_count, s.lunch_sale, s.dinner_head_count, s.dinner_sale,
-		       s.credit_sale, s.reji_money, COALESCE(s.note, ''), s.created_at
+		       s.credit_sale, s.reji_money, COALESCE(s.note, ''), s.created_at,
+		       COALESCE(s.updated_at, ''), COALESCE(s.updated_by, 0)
 		FROM sales s
 		JOIN restaurants r ON s.restaurant_id = r.id
 		WHERE s.employee_id = ?`
@@ -232,8 +242,17 @@ func GetMySales(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	for i := range sales {
-		sales[i].Expenditures, _ = getExpenditures(sales[i].ID)
+	// Load expenditures for all sales in a single query
+	if len(sales) > 0 {
+		saleIDs := make([]int, len(sales))
+		for i, s := range sales {
+			saleIDs[i] = s.ID
+		}
+		if expMap, err := getExpendituresForSales(saleIDs); err == nil {
+			for i := range sales {
+				sales[i].Expenditures = expMap[sales[i].ID]
+			}
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -387,12 +406,14 @@ func UpdateSale(w http.ResponseWriter, r *http.Request) {
 	// Update the sale
 	_, err = database.DB.Exec(
 		`UPDATE sales SET restaurant_id = ?, date = ?, lunch_head_count = ?, lunch_sale = ?,
-		 dinner_head_count = ?, dinner_sale = ?, credit_sale = ?, reji_money = ?, note = ?
+		 dinner_head_count = ?, dinner_sale = ?, credit_sale = ?, reji_money = ?, note = ?,
+		 updated_at = CURRENT_TIMESTAMP, updated_by = ?
 		 WHERE id = ?`,
 		restaurantID, req.Date,
 		req.LunchHeadCount, req.LunchSale,
 		req.DinnerHeadCount, req.DinnerSale,
-		req.CreditSale, req.RejiMoney, req.Note, req.ID,
+		req.CreditSale, req.RejiMoney, req.Note,
+		userID, req.ID,
 	)
 	if err != nil {
 		http.Error(w, `{"error": "Failed to update sale entry"}`, http.StatusInternalServerError)
@@ -480,6 +501,7 @@ func scanSales(rows interface {
 			&sale.Date, &sale.LunchHeadCount, &sale.LunchSale,
 			&sale.DinnerHeadCount, &sale.DinnerSale,
 			&sale.CreditSale, &sale.RejiMoney, &sale.Note, &sale.CreatedAt,
+			&sale.UpdatedAt, &sale.UpdatedBy,
 		)
 		if err != nil {
 			return nil, err
@@ -574,6 +596,40 @@ func ensureNoDuplicateSale(restaurantID int, date string, excludeSaleID int) err
 		return err
 	}
 	return errDuplicateSale
+}
+
+// getExpendituresForSales fetches expenditures for multiple sales in a single query,
+// returning a map from sale ID to its expenditures.
+func getExpendituresForSales(saleIDs []int) (map[int][]models.Expenditure, error) {
+	result := make(map[int][]models.Expenditure)
+	if len(saleIDs) == 0 {
+		return result, nil
+	}
+	for _, id := range saleIDs {
+		result[id] = []models.Expenditure{}
+	}
+	placeholders := strings.Repeat("?,", len(saleIDs))
+	placeholders = placeholders[:len(placeholders)-1]
+	args := make([]interface{}, len(saleIDs))
+	for i, id := range saleIDs {
+		args[i] = id
+	}
+	rows, err := database.DB.Query(
+		fmt.Sprintf("SELECT id, sale_id, title, amount FROM expenditures WHERE sale_id IN (%s)", placeholders),
+		args...,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var exp models.Expenditure
+		if err := rows.Scan(&exp.ID, &exp.SaleID, &exp.Title, &exp.Amount); err != nil {
+			return nil, err
+		}
+		result[exp.SaleID] = append(result[exp.SaleID], exp)
+	}
+	return result, rows.Err()
 }
 
 // getExpenditures fetches expenditures for a given sale ID.
