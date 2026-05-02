@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"prepsheet-backend/database"
 	"prepsheet-backend/models"
 )
 
@@ -206,12 +207,8 @@ func TestLogin_InactiveUser(t *testing.T) {
 	rr := httptest.NewRecorder()
 	Signup(rr, req)
 
-	// Deactivate
-	statusBody := `{"user_id":1,"status":"inactive"}`
-	req2 := httptest.NewRequest(http.MethodPut, "/api/users/status", bytes.NewBufferString(statusBody))
-	req2.Header.Set("Content-Type", "application/json")
-	rr2 := httptest.NewRecorder()
-	UpdateUserStatus(rr2, req2)
+	// Deactivate directly via DB (UpdateUserStatus requires manager auth context)
+	database.DB.Exec("UPDATE users SET status = 'inactive' WHERE email = ?", "inactive@example.com")
 
 	// Try to login
 	loginBody := `{"email":"inactive@example.com","password":"pass123"}`
@@ -243,8 +240,10 @@ func TestLogin_MissingFields(t *testing.T) {
 func TestGetUsers_Empty(t *testing.T) {
 	setupTestDB()
 	defer teardownTestDB()
+	managerID := setupManagerUser(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/users", nil)
+	req = requestWithUserID(req, managerID)
 	rr := httptest.NewRecorder()
 	GetUsers(rr, req)
 
@@ -262,18 +261,16 @@ func TestGetUsers_Empty(t *testing.T) {
 func TestGetUsers_WithData(t *testing.T) {
 	setupTestDB()
 	defer teardownTestDB()
+	managerID := setupManagerUser(t)
 
-	// Create two users
-	for _, body := range []string{
-		`{"name":"Alice","email":"alice@example.com","password":"password","role":"manager"}`,
-		`{"name":"Bob","email":"bob@example.com","password":"password","role":"employee"}`,
-	} {
-		req := httptest.NewRequest(http.MethodPost, "/api/signup", bytes.NewBufferString(body))
-		req.Header.Set("Content-Type", "application/json")
-		Signup(httptest.NewRecorder(), req)
-	}
+	// Create two employees linked to the manager
+	database.DB.Exec("INSERT INTO users (name, email, password, role, status, manager_id) VALUES (?,?,?,?,?,?)",
+		"Alice", "alice@example.com", "hashed", "employee", "active", managerID)
+	database.DB.Exec("INSERT INTO users (name, email, password, role, status, manager_id) VALUES (?,?,?,?,?,?)",
+		"Bob", "bob@example.com", "hashed", "employee", "active", managerID)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/users", nil)
+	req = requestWithUserID(req, managerID)
 	rr := httptest.NewRecorder()
 	GetUsers(rr, req)
 
@@ -291,17 +288,17 @@ func TestGetUsers_WithData(t *testing.T) {
 func TestUpdateUserStatus_Success(t *testing.T) {
 	setupTestDB()
 	defer teardownTestDB()
+	managerID := setupManagerUser(t)
 
-	// Create a user
-	signupBody := `{"name":"Status User","email":"status@example.com","password":"password","role":"employee"}`
-	req := httptest.NewRequest(http.MethodPost, "/api/signup", bytes.NewBufferString(signupBody))
-	req.Header.Set("Content-Type", "application/json")
-	Signup(httptest.NewRecorder(), req)
+	// Create an employee linked to the manager
+	database.DB.Exec("INSERT INTO users (name, email, password, role, status, manager_id) VALUES (?,?,?,?,?,?)",
+		"Status User", "status@example.com", "hashed", "employee", "active", managerID)
 
-	// Update status
-	statusBody := `{"user_id":1,"status":"inactive"}`
+	// Update status (employee is ID 2 since manager is ID 1)
+	statusBody := `{"user_id":2,"status":"inactive"}`
 	req2 := httptest.NewRequest(http.MethodPut, "/api/users/status", bytes.NewBufferString(statusBody))
 	req2.Header.Set("Content-Type", "application/json")
+	req2 = requestWithUserID(req2, managerID)
 	rr := httptest.NewRecorder()
 	UpdateUserStatus(rr, req2)
 
@@ -326,10 +323,12 @@ func TestUpdateUserStatus_MethodNotAllowed(t *testing.T) {
 func TestUpdateUserStatus_InvalidStatus(t *testing.T) {
 	setupTestDB()
 	defer teardownTestDB()
+	managerID := setupManagerUser(t)
 
 	body := `{"user_id":1,"status":"banned"}`
 	req := httptest.NewRequest(http.MethodPut, "/api/users/status", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
+	req = requestWithUserID(req, managerID)
 	rr := httptest.NewRecorder()
 	UpdateUserStatus(rr, req)
 
